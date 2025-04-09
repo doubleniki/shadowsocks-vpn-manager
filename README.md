@@ -81,7 +81,7 @@ ssh admin@192.168.50.1 -p <порт>
 cd /tmp
 opkg update
 opkg install git git-http
-git clone https://github.com/your-username/shadowsocks-vpn-manager.git
+git clone https://github.com/doubleniki/shadowsocks-vpn-manager.git
 cd shadowsocks-vpn-manager
 ```
 
@@ -213,32 +213,32 @@ http://[IP-роутера]:8080
 
 1. Убедитесь, что веб-сервер запущен:
 
-   ```
-   ps | grep shadowsocks_api
-   ```
+```bash
+ps | grep shadowsocks_api
+```
 
-2. Перезапустите веб-интерфейс:
+2.Перезапустите веб-интерфейс:
 
-   ```
-   /jffs/scripts/shadowsocks_daemon.sh stop-webui
-   /jffs/scripts/shadowsocks_daemon.sh start-webui
-   ```
+```bash
+/jffs/scripts/shadowsocks_daemon.sh stop-webui
+/jffs/scripts/shadowsocks_daemon.sh start-webui
+```
 
 ### Проблемы с маршрутизацией
 
 1. Проверьте правила iptables:
 
-   ```
-   iptables -t nat -L SHADOWSOCKS
-   ```
+```bash
+iptables -t nat -L SHADOWSOCKS
+```
 
 2. Проверьте наборы ipset:
 
-   ```
-   ipset list ss_bypass
-   ipset list ss_direct
-   ipset list ss_devices
-   ```
+```bash
+ipset list ss_bypass
+ipset list ss_direct
+ipset list ss_devices
+```
 
 ## Безопасность
 
@@ -247,9 +247,9 @@ http://[IP-роутера]:8080
 1. Использовать его только в локальной сети
 2. Отключать веб-интерфейс, когда он не используется:
 
-   ```
-   /jffs/scripts/shadowsocks_daemon.sh disable-webui
-   ```
+```bash
+/jffs/scripts/shadowsocks_daemon.sh disable-webui
+```
 
 ## Лицензия
 
