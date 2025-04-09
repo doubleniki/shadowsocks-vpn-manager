@@ -531,7 +531,18 @@ start_server() {
 
     # Запускаем HTTP-сервер на указанном порту
     while true; do
-        nc -l -p $port -e "$0" handle_request
+        # Проверяем версию netcat
+        if nc -h 2>&1 | grep -q "listen mode"; then
+            # Стандартная версия netcat (GNU)
+            nc -l -p $port -e "$0" handle_request
+        elif nc -h 2>&1 | grep -q "OpenBSD"; then
+            # OpenBSD версия netcat
+            nc -l $port -e "$0" handle_request
+        else
+            # Пробуем альтернативный вариант без -e (для некоторых версий)
+            log "WARNING" "Используется альтернативный метод запуска netcat"
+            nc -l $port | "$0" handle_request
+        fi
         log "INFO" "Обработан запрос"
     done
 }
