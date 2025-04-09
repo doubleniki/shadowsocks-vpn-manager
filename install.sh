@@ -32,7 +32,72 @@ fi
 # Устанавливаем необходимые пакеты
 echo "Установка необходимых пакетов..."
 opkg update || error_exit "Не удалось обновить список пакетов"
-opkg install shadowsocks-libev-ss-local shadowsocks-libev-ss-redir libuci libuci-lua libustream-openssl bash nano netcat || error_exit "Не удалось установить необходимые пакеты"
+
+# Проверяем наличие shadowsocks-libev
+echo "Проверка наличия shadowsocks-libev..."
+if [ ! -f "/opt/bin/ss-redir" ]; then
+    echo "Установка shadowsocks-libev..."
+    opkg install shadowsocks-libev-ss-local shadowsocks-libev-ss-redir || error_exit "Не удалось установить shadowsocks-libev"
+else
+    echo "shadowsocks-libev уже установлен."
+fi
+
+# Проверяем наличие bash
+echo "Проверка наличия bash..."
+if [ ! -f "/opt/bin/bash" ]; then
+    echo "Установка bash..."
+    opkg install bash || error_exit "Не удалось установить bash"
+else
+    echo "bash уже установлен."
+fi
+
+# Проверяем наличие nano
+echo "Проверка наличия nano..."
+if [ ! -f "/opt/bin/nano" ]; then
+    echo "Установка nano..."
+    opkg install nano || error_exit "Не удалось установить nano"
+else
+    echo "nano уже установлен."
+fi
+
+# Проверяем наличие netcat
+echo "Проверка наличия netcat..."
+if [ ! -f "/opt/bin/netcat" ]; then
+    echo "Установка netcat..."
+    opkg install netcat || error_exit "Не удалось установить netcat"
+else
+    echo "netcat уже установлен."
+fi
+
+# Проверяем наличие libuci (обычно уже установлен в прошивке)
+echo "Проверка наличия libuci..."
+if [ ! -f "/usr/lib/libuci.so" ]; then
+    echo "Предупреждение: libuci не найден. Это может вызвать проблемы."
+    echo "Попытка установки из альтернативного репозитория..."
+    opkg install --force-depends libuci || echo "Не удалось установить libuci, но установка продолжится."
+else
+    echo "libuci уже установлен в системе."
+fi
+
+# Проверяем наличие libuci-lua (обычно уже установлен в прошивке)
+echo "Проверка наличия libuci-lua..."
+if [ ! -f "/usr/lib/lua/luci/model/uci.lua" ]; then
+    echo "Предупреждение: libuci-lua не найден. Это может вызвать проблемы."
+    echo "Попытка установки из альтернативного репозитория..."
+    opkg install --force-depends libuci-lua || echo "Не удалось установить libuci-lua, но установка продолжится."
+else
+    echo "libuci-lua уже установлен в системе."
+fi
+
+# Проверяем наличие libustream-openssl (обычно уже установлен в прошивке)
+echo "Проверка наличия libustream-openssl..."
+if [ ! -f "/usr/lib/libustream-openssl.so" ]; then
+    echo "Предупреждение: libustream-openssl не найден. Это может вызвать проблемы."
+    echo "Попытка установки из альтернативного репозитория..."
+    opkg install --force-depends libustream-openssl || echo "Не удалось установить libustream-openssl, но установка продолжится."
+else
+    echo "libustream-openssl уже установлен в системе."
+fi
 
 # Проверяем наличие исходных файлов
 echo "Проверка исходных файлов..."
