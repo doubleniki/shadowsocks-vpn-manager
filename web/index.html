@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shadowsocks VPN Routing Manager</title>
+    <style>
+      /* Основные стили */
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        color: #0151b0;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      h2 {
+        color: #0151b0;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 10px;
+        margin-top: 40px;
+      }
+
+      .flex-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+      }
+
+      .flex-item {
+        flex: 1;
+        min-width: 300px;
+      }
+
+      /* Формы и элементы управления */
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+
+      input[type="text"],
+      input[type="number"],
+      input[type="password"],
+      select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+
+      button {
+        background-color: #0151b0;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      button:hover {
+        background-color: #013d8a;
+      }
+
+      .status {
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+      }
+
+      .status.connected {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        border: 1px solid #c8e6c9;
+      }
+
+      .status.disconnected {
+        background-color: #ffebee;
+        color: #c62828;
+        border: 1px solid #ffcdd2;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      /* Таблицы */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+
+      th {
+        background-color: #f2f2f2;
+      }
+
+      tr:hover {
+        background-color: #f5f5f5;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 5px;
+      }
+
+      .action-buttons button {
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+
+      .delete-btn {
+        background-color: #c62828;
+      }
+
+      .delete-btn:hover {
+        background-color: #b71c1c;
+      }
+
+      .card {
+        background-color: #fff;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid #ddd;
+        margin-bottom: 20px;
+      }
+
+      .tab {
+        padding: 10px 15px;
+        cursor: pointer;
+        border: 1px solid transparent;
+      }
+
+      .tab.active {
+        border: 1px solid #ddd;
+        border-bottom-color: #fff;
+        border-radius: 5px 5px 0 0;
+        margin-bottom: -1px;
+        background-color: #fff;
+        font-weight: bold;
+        color: #0151b0;
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      #log-container {
+        max-height: 300px;
+        overflow-y: auto;
+        background-color: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+
+      .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        border-radius: 4px;
+        color: white;
+        background-color: #4caf50;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1000;
+      }
+
+      .notification.show {
+        opacity: 1;
+      }
+
+      .notification.error {
+        background-color: #f44336;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Shadowsocks VPN Routing Manager</h1>
+
+      <!-- Уведомление -->
+      <div id="notification" class="notification"></div>
+
+      <!-- Статус и управление VPN -->
+      <div class="status" id="vpn-status">Проверка статуса...</div>
+
+      <div class="button-group">
+        <button id="start-vpn">Включить VPN</button>
+        <button id="stop-vpn">Выключить VPN</button>
+        <button id="restart-vpn">Перезапустить VPN</button>
+        <button id="check-status">Проверить статус</button>
+      </div>
+
+      <!-- Меню вкладок -->
+      <div class="tabs">
+        <div class="tab active" data-tab="settings">Настройки</div>
+        <div class="tab" data-tab="routes">Маршрутизация</div>
+        <div class="tab" data-tab="devices">Устройства</div>
+        <div class="tab" data-tab="logs">Журнал</div>
+      </div>
+
+      <!-- Содержимое вкладок -->
+      <div id="settings" class="tab-content active">
+        <h2>Настройки Shadowsocks</h2>
+
+        <div class="card">
+          <div class="flex-container">
+            <div class="flex-item">
+              <div class="form-group">
+                <label for="server">Сервер</label>
+                <input
+                  type="text"
+                  id="server"
+                  placeholder="Введите IP или домен сервера"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="port">Порт</label>
+                <input type="number" id="port" placeholder="Порт сервера" />
+              </div>
+
+              <div class="form-group">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" placeholder="Пароль" />
+              </div>
+            </div>
+
+            <div class="flex-item">
+              <div class="form-group">
+                <label for="method">Метод шифрования</label>
+                <select id="method">
+                  <option value="aes-256-gcm">aes-256-gcm</option>
+                  <option value="chacha20-ietf-poly1305">
+                    chacha20-ietf-poly1305
+                  </option>
+                  <option value="aes-128-gcm">aes-128-gcm</option>
+                  <option value="aes-192-gcm">aes-192-gcm</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="local-port">Локальный порт</label>
+                <input type="number" id="local-port" value="1080" />
+              </div>
+
+              <div class="form-group">
+                <label for="timeout">Таймаут (сек)</label>
+                <input type="number" id="timeout" value="300" />
+              </div>
+            </div>
+          </div>
+
+          <button id="save-settings">Сохранить настройки</button>
+        </div>
+
+        <h2>Режим маршрутизации</h2>
+
+        <div class="card">
+          <div class="form-group">
+            <label for="route-mode">Режим маршрутизации</label>
+            <select id="route-mode">
+              <option value="all">Весь трафик через VPN</option>
+              <option value="bypass">
+                Весь трафик напрямую, выбранные через VPN
+              </option>
+              <option value="direct">
+                Весь трафик через VPN, выбранные напрямую
+              </option>
+            </select>
+          </div>
+
+          <button id="save-route-mode">Сохранить режим</button>
+        </div>
+      </div>
+
+      <div id="routes" class="tab-content">
+        <h2>Управление маршрутизацией</h2>
+
+        <div class="card">
+          <div class="form-group">
+            <label for="domain-ip">Добавить домен или IP</label>
+            <div style="display: flex; gap: 10px">
+              <input
+                type="text"
+                id="domain-ip"
+                placeholder="example.com или 1.2.3.4"
+                style="flex: 1"
+              />
+              <select id="route-type">
+                <option value="vpn">Через VPN</option>
+                <option value="direct">Напрямую</option>
+              </select>
+              <button id="add-route">Добавить</button>
+            </div>
+          </div>
+        </div>
+
+        <h3>Маршруты через VPN</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Домен/IP</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="vpn-routes">
+            <!-- Будет заполнено JavaScript -->
+          </tbody>
+        </table>
+
+        <h3>Маршруты напрямую</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Домен/IP</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="direct-routes">
+            <!-- Будет заполнено JavaScript -->
+          </tbody>
+        </table>
+      </div>
+
+      <div id="devices" class="tab-content">
+        <h2>Управление устройствами</h2>
+
+        <div class="card">
+          <div class="form-group">
+            <label for="device-mac">Добавить устройство</label>
+            <div style="display: flex; gap: 10px">
+              <input
+                type="text"
+                id="device-mac"
+                placeholder="MAC-адрес (00:11:22:33:44:55)"
+                style="flex: 1"
+              />
+              <input
+                type="text"
+                id="device-name"
+                placeholder="Имя устройства"
+                style="flex: 1"
+              />
+              <select id="device-route">
+                <option value="vpn">Через VPN</option>
+                <option value="direct">Напрямую</option>
+              </select>
+              <button id="add-device">Добавить</button>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>MAC-адрес</th>
+              <th>Имя устройства</th>
+              <th>Маршрутизация</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="devices-table">
+            <!-- Будет заполнено JavaScript -->
+          </tbody>
+        </table>
+      </div>
+
+      <div id="logs" class="tab-content">
+        <h2>Журнал работы</h2>
+
+        <div class="button-group">
+          <button id="refresh-logs">Обновить журнал</button>
+          <button id="clear-logs">Очистить журнал</button>
+        </div>
+
+        <div id="log-container">
+          <!-- Содержимое журнала -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // JavaScript для index.html
+      document.addEventListener("DOMContentLoaded", function () {
+        // Базовый URL для API
+        const API_URL = window.location.origin;
+
+        // Функция для показа уведомлений
+        function showNotification(message, isError = false) {
+          const notification = document.getElementById("notification");
+          notification.textContent = message;
+          notification.className = isError
+            ? "notification error show"
+            : "notification show";
+
+          // Скрываем уведомление через 3 секунды
+          setTimeout(() => {
+            notification.className = "notification";
+          }, 3000);
+        }
+
+        // Обработка вкладок
+        const tabs = document.querySelectorAll(".tab");
+        const tabContents = document.querySelectorAll(".tab-content");
+
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            // Удаляем активный класс со всех вкладок
+            tabs.forEach((t) => t.classList.remove("active"));
+            tabContents.forEach((c) => c.classList.remove("active"));
+
+            // Добавляем активный класс выбранной вкладке
+            tab.classList.add("active");
+            document.getElementById(tab.dataset.tab).classList.add("active");
+          });
+        });
+
+        // Функция для загрузки статуса VPN
+        async function loadVPNStatus() {
+          try {
+            const response = await fetch(`${API_URL}/api/status`);
+            const data = await response.json();
+
+            const vpnStatus = document.getElementById("vpn-status");
+
+            if (data.status === "running") {
+              vpnStatus.className = "status connected";
+              vpnStatus.textContent = "Статус VPN: Подключен";
+            } else {
+              vpnStatus.className = "status disconnected";
+              vpnStatus.textContent = "Статус VPN: Отключен";
+            }
+          } catch (error) {
+            console.error("Ошибка при получении статуса:", error);
+            showNotification("Не удалось получить статус VPN", true);
+          }
+        }
+
+        // Функция для загрузки конфигурации
+        async function loadConfig() {
+          try {
+            const response = await fetch(`${API_URL}/api/config`);
+            const data = await response.json();
+
+            // Заполняем поля формы
+            if (!data.error) {
+              document.getElementById("server").value = data.server || "";
+              document.getElementById("port").value = data.server_port || "";
+              document.getElementById("password").value = data.password || "";
+              document.getElementById("method").value =
+                data.method || "aes-256-gcm";
+              document.getElementById("local-port").value =
+                data.local_port || 1080;
+              document.getElementById("timeout").value = data.timeout || 300;
+            }
+          } catch (error) {
+            console.error("Ошибка при получении конфигурации:", error);
+          }
+        }
+
+        // Функция для загрузки режима маршрутизации
+        async function loadRouteMode() {
+          try {
+            const response = await fetch(`${API_URL}/api/route_mode`);
+            const data = await response.json();
+
+            document.getElementById("route-mode").value = data.mode || "all";
+          } catch (error) {
+            console.error("Ошибка при получении режима маршрутизации:", error);
+          }
+        }
+
+        // Функция для загрузки маршрутов
+        async function loadRoutes() {
+          try {
+            const response = await fetch(`${API_URL}/api/routes`);
+            const data = await response.json();
+
+            // Заполняем таблицу VPN маршрутов
+            const vpnRoutes = document.getElementById("vpn-routes");
+            vpnRoutes.innerHTML = "";
+
+            if (data.vpn && data.vpn.length > 0) {
+              data.vpn.forEach((route) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                        <td>${route}</td>
+                        <td class="action-buttons">
+                            <button class="delete-btn" data-route="${route}">Удалить</button>
+                        </td>
+                    `;
+                vpnRoutes.appendChild(row);
+              });
+
+              // Добавляем обработчики для кнопок удаления
+              vpnRoutes.querySelectorAll(".delete-btn").forEach((btn) => {
+                btn.addEventListener("click", async () => {
+                  const route = btn.dataset.route;
+                  await deleteRoute(route);
+                });
+              });
+            }
+
+            // Заполняем таблицу прямых маршрутов
+            const directRoutes = document.getElementById("direct-routes");
+            directRoutes.innerHTML = "";
+
+            if (data.direct && data.direct.length > 0) {
+              data.direct.forEach((route) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                        <td>${route}</td>
+                        <td class="action-buttons">
+                            <button class="delete-btn" data-route="${route}">Удалить</button>
+                        </td>
+                    `;
+                directRoutes.appendChild(row);
+              });
+
+              // Добавляем обработчики для кнопок удаления
+              directRoutes.querySelectorAll(".delete-btn").forEach((btn) => {
+                btn.addEventListener("click", async () => {
+                  const route = btn.dataset.route;
+                  await deleteRoute(route);
+                });
+              });
+            }
+          } catch (error) {
+            console.error("Ошибка при получении маршрутов:", error);
+            showNotification("Не удалось загрузить маршруты", true);
+          }
+        }
+
+        // Функция для загрузки устройств
+        async function loadDevices() {
+          try {
+            const response = await fetch(`${API_URL}/api/devices`);
+            const data = await response.json();
+
+            // Заполняем таблицу устройств
+            const devicesTable = document.getElementById("devices-table");
+            devicesTable.innerHTML = "";
+
+            // Функция для добавления устройств в таблицу
+            const addDevicesToTable = (devices, type) => {
+              if (devices && devices.length > 0) {
+                devices.forEach((mac) => {
+                  const name =
+                    data.names && data.names[mac] ? data.names[mac] : mac;
+                  const row = document.createElement("tr");
+                  row.innerHTML = `
+                            <td>${mac}</td>
+                            <td>${name}</td>
+                            <td>${
+                              type === "vpn" ? "Через VPN" : "Напрямую"
+                            }</td>
+                            <td class="action-buttons">
+                                <button class="delete-btn" data-mac="${mac}">Удалить</button>
+                            </td>
+                        `;
+                  devicesTable.appendChild(row);
+                });
+              }
+            };
+
+            // Добавляем устройства VPN
+            addDevicesToTable(data.vpn, "vpn");
+
+            // Добавляем устройства прямого подключения
+            addDevicesToTable(data.direct, "direct");
+
+            // Добавляем обработчики для кнопок удаления
+            devicesTable.querySelectorAll(".delete-btn").forEach((btn) => {
+              btn.addEventListener("click", async () => {
+                const mac = btn.dataset.mac;
+                await deleteDevice(mac);
+              });
+            });
+          } catch (error) {
+            console.error("Ошибка при получении устройств:", error);
+            showNotification("Не удалось загрузить устройства", true);
+          }
+        }
+
+        // Функция для загрузки журнала
+        async function loadLogs() {
+          try {
+            const response = await fetch(`${API_URL}/api/logs?lines=100`);
+            const data = await response.json();
+
+            const logContainer = document.getElementById("log-container");
+            logContainer.textContent = data.logs || "Журнал пуст";
+
+            // Прокручиваем к последнему сообщению
+            logContainer.scrollTop = logContainer.scrollHeight;
+          } catch (error) {
+            console.error("Ошибка при получении журнала:", error);
+            showNotification("Не удалось загрузить журнал", true);
+          }
+        }
+
+        // Функция для удаления маршрута
+        async function deleteRoute(route) {
+          try {
+            const response = await fetch(`${API_URL}/api/routes/delete`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ target: route }),
+            });
+
+            const data = await response.json();
+
+            if (data.result === "success") {
+              showNotification("Маршрут успешно удален");
+              loadRoutes();
+            } else {
+              showNotification(
+                `Ошибка: ${data.error || "Не удалось удалить маршрут"}`,
+                true
+              );
+            }
+          } catch (error) {
+            console.error("Ошибка при удалении маршрута:", error);
+            showNotification("Не удалось удалить маршрут", true);
+          }
+        }
+
+        // Функция для удаления устройства
+        async function deleteDevice(mac) {
+          try {
+            const response = await fetch(`${API_URL}/api/devices/delete`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ mac: mac }),
+            });
+
+            const data = await response.json();
+
+            if (data.result === "success") {
+              showNotification("Устройство успешно удалено");
+              loadDevices();
+            } else {
+              showNotification(
+                `Ошибка: ${data.error || "Не удалось удалить устройство"}`,
+                true
+              );
+            }
+          } catch (error) {
+            console.error("Ошибка при удалении устройства:", error);
+            showNotification("Не удалось удалить устройство", true);
+          }
+        }
+
+        // Загружаем данные при загрузке страницы
+        window.addEventListener("load", () => {
+          loadVPNStatus();
+          loadConfig();
+          loadRouteMode();
+          loadRoutes();
+          loadDevices();
+          loadLogs();
+        });
+
+        // Обработчики событий для кнопок управления VPN
+        document
+          .getElementById("start-vpn")
+          .addEventListener("click", async () => {
+            try {
+              const response = await fetch(`${API_URL}/api/start`, {
+                method: "POST",
+              });
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("VPN запущен");
+                loadVPNStatus();
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось запустить VPN"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при запуске VPN:", error);
+              showNotification("Не удалось запустить VPN", true);
+            }
+          });
+
+        document
+          .getElementById("stop-vpn")
+          .addEventListener("click", async () => {
+            try {
+              const response = await fetch(`${API_URL}/api/stop`, {
+                method: "POST",
+              });
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("VPN остановлен");
+                loadVPNStatus();
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось остановить VPN"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при остановке VPN:", error);
+              showNotification("Не удалось остановить VPN", true);
+            }
+          });
+
+        document
+          .getElementById("restart-vpn")
+          .addEventListener("click", async () => {
+            try {
+              const response = await fetch(`${API_URL}/api/restart`, {
+                method: "POST",
+              });
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("VPN перезапущен");
+                loadVPNStatus();
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось перезапустить VPN"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при перезапуске VPN:", error);
+              showNotification("Не удалось перезапустить VPN", true);
+            }
+          });
+
+        document
+          .getElementById("check-status")
+          .addEventListener("click", () => {
+            loadVPNStatus();
+            showNotification("Статус обновлен");
+          });
+
+        // Обработчик для сохранения настроек
+        document
+          .getElementById("save-settings")
+          .addEventListener("click", async () => {
+            const server = document.getElementById("server").value;
+            const port = document.getElementById("port").value;
+            const password = document.getElementById("password").value;
+            const method = document.getElementById("method").value;
+            const localPort = document.getElementById("local-port").value;
+            const timeout = document.getElementById("timeout").value;
+
+            if (!server || !port || !password) {
+              showNotification(
+                "Пожалуйста, заполните все обязательные поля!",
+                true
+              );
+              return;
+            }
+
+            try {
+              const response = await fetch(`${API_URL}/api/config`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  server: server,
+                  server_port: parseInt(port),
+                  password: password,
+                  method: method,
+                  local_port: parseInt(localPort),
+                  timeout: parseInt(timeout),
+                }),
+              });
+
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("Настройки сохранены!");
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось сохранить настройки"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при сохранении настроек:", error);
+              showNotification("Не удалось сохранить настройки", true);
+            }
+          });
+
+        // Обработчик для сохранения режима маршрутизации
+        document
+          .getElementById("save-route-mode")
+          .addEventListener("click", async () => {
+            const routeMode = document.getElementById("route-mode").value;
+
+            try {
+              const response = await fetch(`${API_URL}/api/route_mode`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  mode: routeMode,
+                }),
+              });
+
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("Режим маршрутизации сохранен!");
+              } else {
+                showNotification(
+                  `Ошибка: ${
+                    data.error || "Не удалось сохранить режим маршрутизации"
+                  }`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error(
+                "Ошибка при сохранении режима маршрутизации:",
+                error
+              );
+              showNotification(
+                "Не удалось сохранить режим маршрутизации",
+                true
+              );
+            }
+          });
+
+        // Обработчик для добавления маршрута
+        document
+          .getElementById("add-route")
+          .addEventListener("click", async () => {
+            const domainIP = document.getElementById("domain-ip").value;
+            const routeType = document.getElementById("route-type").value;
+
+            if (!domainIP) {
+              showNotification("Пожалуйста, введите домен или IP-адрес!", true);
+              return;
+            }
+
+            try {
+              const response = await fetch(`${API_URL}/api/routes`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  target: domainIP,
+                  type: routeType,
+                }),
+              });
+
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("Маршрут добавлен!");
+                loadRoutes();
+
+                // Очистка поля ввода
+                document.getElementById("domain-ip").value = "";
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось добавить маршрут"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при добавлении маршрута:", error);
+              showNotification("Не удалось добавить маршрут", true);
+            }
+          });
+
+        // Обработчик для добавления устройства
+        document
+          .getElementById("add-device")
+          .addEventListener("click", async () => {
+            const mac = document.getElementById("device-mac").value;
+            const name = document.getElementById("device-name").value;
+            const route = document.getElementById("device-route").value;
+
+            if (!mac || !name) {
+              showNotification("Пожалуйста, заполните все поля!", true);
+              return;
+            }
+
+            // Проверка формата MAC-адреса
+            const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+            if (!macRegex.test(mac)) {
+              showNotification(
+                "Пожалуйста, введите корректный MAC-адрес в формате 00:11:22:33:44:55",
+                true
+              );
+              return;
+            }
+
+            try {
+              const response = await fetch(`${API_URL}/api/devices`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  mac: mac,
+                  name: name,
+                  type: route,
+                }),
+              });
+
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("Устройство добавлено!");
+                loadDevices();
+
+                // Очистка полей ввода
+                document.getElementById("device-mac").value = "";
+                document.getElementById("device-name").value = "";
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось добавить устройство"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при добавлении устройства:", error);
+              showNotification("Не удалось добавить устройство", true);
+            }
+          });
+
+        // Обработчики для управления журналом
+        document
+          .getElementById("refresh-logs")
+          .addEventListener("click", () => {
+            loadLogs();
+            showNotification("Журнал обновлен");
+          });
+
+        document
+          .getElementById("clear-logs")
+          .addEventListener("click", async () => {
+            try {
+              const response = await fetch(`${API_URL}/api/logs`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  action: "clear",
+                }),
+              });
+
+              const data = await response.json();
+
+              if (data.result === "success") {
+                showNotification("Журнал очищен");
+                loadLogs();
+              } else {
+                showNotification(
+                  `Ошибка: ${data.error || "Не удалось очистить журнал"}`,
+                  true
+                );
+              }
+            } catch (error) {
+              console.error("Ошибка при очистке журнала:", error);
+              showNotification("Не удалось очистить журнал", true);
+            }
+          });
+      });
+    </script>
+  </body>
+</html>
