@@ -7,33 +7,86 @@ CONFIG_FILE="$CONFIG_DIR/config.json"
 ROUTES_FILE="$CONFIG_DIR/routes.json"
 DEVICES_FILE="$CONFIG_DIR/devices.json"
 LOG_FILE="$CONFIG_DIR/shadowsocks.log"
+PID_FILE="/tmp/shadowsocks.pid"
+MAX_LOG_SIZE=10485760  # 10MB в байтах
+OPKG_TIMEOUT=60  # Таймаут для opkg в секундах
+PROCESS_TIMEOUT=30  # Таймаут для процессов в секундах
 
 # Создаем директории, если они не существуют
 mkdir -p $CONFIG_DIR
 
 # Функция для логирования
 log() {
+    local level=$1
+    shift
+    local message="$*"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "$timestamp [$1] $2" >> $LOG_FILE
+    echo "$timestamp [$level] $message" >> $LOG_FILE
+    echo "$message"
 
-    # Ограничиваем размер лог-файла
-    if [ $(wc -l < $LOG_FILE) -gt 1000 ]; then
-        tail -n 500 $LOG_FILE > ${LOG_FILE}.tmp
-        mv ${LOG_FILE}.tmp $LOG_FILE
+    # Проверяем размер лог-файла
+    check_log_size
+}
+
+# Функция для проверки размера лог-файла
+check_log_size() {
+    if [ -f "$LOG_FILE" ]; then
+        local size=$(stat -f %z "$LOG_FILE" 2>/dev/null || stat -c %s "$LOG_FILE" 2>/dev/null)
+        if [ "$size" -gt "$MAX_LOG_SIZE" ]; then
+            rotate_log
+        fi
     fi
+}
+
+# Функция для ротации лог-файла
+rotate_log() {
+    local timestamp=$(date "+%Y%m%d_%H%M%S")
+    mv "$LOG_FILE" "$LOG_FILE.$timestamp"
+    touch "$LOG_FILE"
+    log "INFO" "Выполнена ротация лог-файла"
+}
+
+# Функция для проверки и создания директорий
+check_directories() {
+    if [ ! -d "$CONFIG_DIR" ]; then
+        mkdir -p "$CONFIG_DIR" || {
+            log "ERROR" "Не удалось создать директорию $CONFIG_DIR"
+            return 1
+        }
+        log "INFO" "Создана директория $CONFIG_DIR"
+    fi
+    return 0
 }
 
 # Проверка наличия необходимых пакетов
 check_dependencies() {
     # Проверяем наличие shadowsocks-libev
     if [ ! -f /opt/bin/ss-redir ]; then
-        log "ERROR" "Shadowsocks-libev не установлен. Устанавливаем..."
-        opkg update
-        opkg install shadowsocks-libev-ss-local shadowsocks-libev-ss-redir
+        log "INFO" "Shadowsocks-libev не установлен. Устанавливаем..."
 
-        if [ $? -ne 0 ]; then
+        # Запускаем opkg с таймаутом
+        timeout $OPKG_TIMEOUT opkg update || {
+            log "ERROR" "Таймаут при обновлении пакетов"
+            return 1
+        }
+
+        timeout $OPKG_TIMEOUT opkg install shadowsocks-libev-ss-local shadowsocks-libev-ss-redir || {
+            log "ERROR" "Таймаут при установке shadowsocks-libev"
+            return 1
+        }
+
+        # Проверяем успешность установки
+        if [ ! -f /opt/bin/ss-redir ]; then
             log "ERROR" "Не удалось установить shadowsocks-libev"
             return 1
+        fi
+
+        # Проверяем версию
+        local version=$(ss-redir -v 2>&1 | grep -oP 'Shadowsocks-libev \K[0-9.]+')
+        if [ -z "$version" ]; then
+            log "WARNING" "Не удалось определить версию shadowsocks-libev"
+        else
+            log "INFO" "Установлена версия shadowsocks-libev: $version"
         fi
     fi
 
@@ -48,13 +101,22 @@ check_dependencies() {
 
 # Проверка статуса Shadowsocks
 check_status() {
-    if [ -f /tmp/shadowsocks.pid ]; then
-        if kill -0 $(cat /tmp/shadowsocks.pid) 2>/dev/null; then
+    if [ -f "$PID_FILE" ]; then
+        local pid=$(cat "$PID_FILE")
+        if kill -0 $pid 2>/dev/null; then
+            # Проверяем, не зомби ли процесс
+            local state=$(ps -o state= -p $pid 2>/dev/null)
+            if [ "$state" = "Z" ]; then
+                log "WARNING" "Обнаружен зомби-процесс, очищаем"
+                rm -f "$PID_FILE"
+                echo "stopped"
+                return 1
+            fi
             echo "running"
             return 0
         else
             echo "stopped"
-            rm -f /tmp/shadowsocks.pid
+            rm -f "$PID_FILE"
             return 1
         fi
     else
@@ -72,8 +134,11 @@ start_shadowsocks() {
         return 0
     fi
 
+    # Проверяем зависимости
+    check_dependencies || return 1
+
     # Проверяем наличие конфигурационного файла
-    if [ ! -f $CONFIG_FILE ]; then
+    if [ ! -f "$CONFIG_FILE" ]; then
         log "ERROR" "Конфигурационный файл не найден: $CONFIG_FILE"
         return 1
     fi
@@ -82,24 +147,32 @@ start_shadowsocks() {
     log "INFO" "Запуск Shadowsocks..."
 
     # Получаем локальный порт из конфигурации
-    local local_port=$(grep -o '"local_port":[^,}]*' $CONFIG_FILE | sed 's/"local_port"://g')
+    local local_port=$(grep -o '"local_port":[^,}]*' "$CONFIG_FILE" | sed 's/"local_port"://g')
     if [ -z "$local_port" ]; then
         local_port=1080
     fi
 
     # Запускаем ss-redir
-    ss-redir -c $CONFIG_FILE -f /tmp/shadowsocks.pid
+    ss-redir -c "$CONFIG_FILE" -f "$PID_FILE" &
+    local pid=$!
 
-    if [ $? -ne 0 ]; then
-        log "ERROR" "Не удалось запустить Shadowsocks"
+    # Ждем запуска процесса
+    if wait_for_process $pid $PROCESS_TIMEOUT; then
+        log "INFO" "Shadowsocks успешно запущен (PID: $pid)"
+
+        # Настраиваем правила маршрутизации
+        setup_routing_rules $local_port || {
+            log "ERROR" "Ошибка при настройке правил маршрутизации"
+            stop_shadowsocks
+            return 1
+        }
+
+        return 0
+    else
+        log "ERROR" "Таймаут при запуске Shadowsocks"
+        rm -f "$PID_FILE"
         return 1
     fi
-
-    # Настраиваем правила маршрутизации
-    setup_routing_rules $local_port
-
-    log "INFO" "Shadowsocks успешно запущен"
-    return 0
 }
 
 # Остановка Shadowsocks
@@ -112,10 +185,30 @@ stop_shadowsocks() {
     fi
 
     # Останавливаем процесс
-    if [ -f /tmp/shadowsocks.pid ]; then
-        log "INFO" "Остановка Shadowsocks..."
-        kill $(cat /tmp/shadowsocks.pid)
-        rm -f /tmp/shadowsocks.pid
+    if [ -f "$PID_FILE" ]; then
+        local pid=$(cat "$PID_FILE")
+        log "INFO" "Остановка Shadowsocks (PID: $pid)..."
+
+        # Отправляем SIGTERM
+        kill $pid
+        local count=0
+
+        # Ждем завершения процесса
+        while [ $count -lt $PROCESS_TIMEOUT ]; do
+            if ! kill -0 $pid 2>/dev/null; then
+                break
+            fi
+            sleep 1
+            count=$((count + 1))
+        done
+
+        # Если процесс все еще работает, отправляем SIGKILL
+        if kill -0 $pid 2>/dev/null; then
+            log "WARNING" "Процесс не завершился, принудительное завершение"
+            kill -9 $pid
+        fi
+
+        rm -f "$PID_FILE"
 
         # Удаляем правила маршрутизации
         cleanup_routing_rules
@@ -141,27 +234,37 @@ restart_shadowsocks() {
 # Настройка правил маршрутизации
 setup_routing_rules() {
     local local_port=$1
+    local error=0
 
     # Очистка старых правил
     cleanup_routing_rules
 
     # Создаем цепочки SHADOWSOCKS
-    iptables -t nat -N SHADOWSOCKS 2>/dev/null
+    iptables -t nat -N SHADOWSOCKS 2>/dev/null || {
+        log "ERROR" "Не удалось создать цепочку SHADOWSOCKS"
+        return 1
+    }
 
     # Создаем наборы ipset
-    ipset create ss_bypass hash:net 2>/dev/null
-    ipset create ss_direct hash:net 2>/dev/null
-    ipset create ss_devices hash:mac 2>/dev/null
+    for set in ss_bypass ss_direct ss_devices; do
+        ipset create $set hash:net 2>/dev/null || {
+            log "ERROR" "Не удалось создать набор $set"
+            return 1
+        }
+    done
 
     # Добавляем локальные сети в bypass по умолчанию
-    ipset add ss_bypass 0.0.0.0/8
-    ipset add ss_bypass 10.0.0.0/8
-    ipset add ss_bypass 127.0.0.0/8
-    ipset add ss_bypass 169.254.0.0/16
-    ipset add ss_bypass 172.16.0.0/12
-    ipset add ss_bypass 192.168.0.0/16
-    ipset add ss_bypass 224.0.0.0/4
-    ipset add ss_bypass 240.0.0.0/4
+    for network in 0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4; do
+        ipset add ss_bypass $network || {
+            log "ERROR" "Не удалось добавить сеть $network в ss_bypass"
+            error=1
+        }
+    done
+
+    if [ $error -eq 1 ]; then
+        cleanup_routing_rules
+        return 1
+    fi
 
     # Загружаем пользовательские правила маршрутизации
     if [ -f "$ROUTES_FILE" ]; then

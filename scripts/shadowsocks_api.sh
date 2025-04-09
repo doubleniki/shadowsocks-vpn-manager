@@ -1,15 +1,45 @@
 #!/bin/sh
 # API для взаимодействия с веб-интерфейсом
 
-# Пути к файлам и скриптам
+# Пути к файлам и скрипты
 SCRIPT_DIR="/jffs/scripts"
 MAIN_SCRIPT="$SCRIPT_DIR/shadowsocks_manager.sh"
 CONFIG_DIR="/jffs/configs/shadowsocks"
 WEB_DIR="/jffs/www/shadowsocks"
+LOG_FILE="$CONFIG_DIR/api.log"
+
+# Функция для логирования
+log() {
+    local level=$1
+    shift
+    local message="$*"
+    local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+}
+
+# Функция для вывода ошибки
+error_response() {
+    local code=$1
+    local message=$2
+    echo "HTTP/1.1 $code"
+    echo "Content-Type: application/json"
+    echo "Access-Control-Allow-Origin: *"
+    echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
+    echo "Access-Control-Allow-Headers: Content-Type"
+    echo ""
+    echo "{\"error\":\"$message\"}"
+    log "ERROR" "$message"
+}
 
 # Создаем необходимые директории
 mkdir -p $CONFIG_DIR
 mkdir -p $WEB_DIR
+
+# Проверяем наличие основного скрипта
+if [ ! -x "$MAIN_SCRIPT" ]; then
+    log "ERROR" "Основной скрипт $MAIN_SCRIPT не найден или не имеет прав на выполнение"
+    exit 1
+fi
 
 # Функция для вывода HTTP-заголовков
 print_headers() {
@@ -31,11 +61,27 @@ handle_options() {
     echo ""
 }
 
+# Функция для безопасного извлечения значений из JSON
+get_json_value() {
+    local json=$1
+    local key=$2
+    echo "$json" | grep -o "\"$key\":\"[^\"]*\"" | sed "s/\"$key\":\"//g" | sed 's/"//g'
+}
+
+get_json_number() {
+    local json=$1
+    local key=$2
+    echo "$json" | grep -o "\"$key\":[0-9]*" | sed "s/\"$key\"://g"
+}
+
 # Функция для обработки запросов API
 handle_request() {
     local request_method=$1
     local request_uri=$2
     local data=$(cat)
+
+    # Логируем запрос
+    log "INFO" "Получен $request_method запрос: $request_uri"
 
     # Убираем query string из URI
     local endpoint=$(echo $request_uri | cut -d '?' -f1)
@@ -54,25 +100,45 @@ handle_request() {
         "/api/status")
             # Получение статуса VPN
             local status=$($MAIN_SCRIPT status)
+            if [ $? -ne 0 ]; then
+                error_response "500" "Ошибка при получении статуса VPN"
+                return
+            fi
             echo "{\"status\":\"$status\"}"
+            log "INFO" "Статус VPN: $status"
             ;;
 
         "/api/start")
             # Запуск VPN
             $MAIN_SCRIPT start > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                error_response "500" "Ошибка при запуске VPN"
+                return
+            fi
             echo "{\"result\":\"success\",\"message\":\"VPN запущен\"}"
+            log "INFO" "VPN запущен"
             ;;
 
         "/api/stop")
             # Остановка VPN
             $MAIN_SCRIPT stop > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                error_response "500" "Ошибка при остановке VPN"
+                return
+            fi
             echo "{\"result\":\"success\",\"message\":\"VPN остановлен\"}"
+            log "INFO" "VPN остановлен"
             ;;
 
         "/api/restart")
             # Перезапуск VPN
             $MAIN_SCRIPT restart > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                error_response "500" "Ошибка при перезапуске VPN"
+                return
+            fi
             echo "{\"result\":\"success\",\"message\":\"VPN перезапущен\"}"
+            log "INFO" "VPN перезапущен"
             ;;
 
         "/api/config")
@@ -80,23 +146,27 @@ handle_request() {
                 # Получение текущей конфигурации
                 if [ -f "$CONFIG_DIR/config.json" ]; then
                     cat "$CONFIG_DIR/config.json"
+                    log "INFO" "Конфигурация получена"
                 else
                     echo "{\"error\":\"Конфигурация не найдена\"}"
+                    log "WARNING" "Конфигурация не найдена"
                 fi
             elif [ "$request_method" = "POST" ]; then
                 # Сохранение новой конфигурации
-                local server=$(echo $data | grep -o '"server":"[^"]*"' | sed 's/"server":"//g' | sed 's/"//g')
-                local server_port=$(echo $data | grep -o '"server_port":[0-9]*' | sed 's/"server_port"://g')
-                local password=$(echo $data | grep -o '"password":"[^"]*"' | sed 's/"password":"//g' | sed 's/"//g')
-                local method=$(echo $data | grep -o '"method":"[^"]*"' | sed 's/"method":"//g' | sed 's/"//g')
-                local timeout=$(echo $data | grep -o '"timeout":[0-9]*' | sed 's/"timeout"://g')
-                local local_port=$(echo $data | grep -o '"local_port":[0-9]*' | sed 's/"local_port"://g')
+                local server=$(get_json_value "$data" "server")
+                local server_port=$(get_json_number "$data" "server_port")
+                local password=$(get_json_value "$data" "password")
+                local method=$(get_json_value "$data" "method")
+                local timeout=$(get_json_number "$data" "timeout")
+                local local_port=$(get_json_number "$data" "local_port")
 
+                # Проверяем обязательные поля
                 if [ -z "$server" ] || [ -z "$server_port" ] || [ -z "$password" ] || [ -z "$method" ]; then
-                    echo "{\"error\":\"Не все обязательные поля заполнены\"}"
+                    error_response "400" "Не все обязательные поля заполнены"
                     return
                 fi
 
+                # Устанавливаем значения по умолчанию
                 if [ -z "$timeout" ]; then
                     timeout=300
                 fi
@@ -105,15 +175,25 @@ handle_request() {
                     local_port=1080
                 fi
 
+                # Сохраняем конфигурацию
                 $MAIN_SCRIPT save_config "$server" "$server_port" "$password" "$method" "$timeout" "$local_port" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при сохранении конфигурации"
+                    return
+                fi
 
                 # Перезапускаем VPN для применения изменений
                 local status=$($MAIN_SCRIPT status)
                 if [ "$status" = "running" ]; then
                     $MAIN_SCRIPT restart > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при перезапуске VPN"
+                        return
+                    fi
                 fi
 
                 echo "{\"result\":\"success\",\"message\":\"Конфигурация сохранена\"}"
+                log "INFO" "Конфигурация сохранена: сервер=$server, порт=$server_port, метод=$method"
             fi
             ;;
 
@@ -123,27 +203,48 @@ handle_request() {
                 if [ -f "$CONFIG_DIR/route_mode" ]; then
                     local mode=$(cat "$CONFIG_DIR/route_mode")
                     echo "{\"mode\":\"$mode\"}"
+                    log "INFO" "Режим маршрутизации получен: $mode"
                 else
                     echo "{\"mode\":\"all\"}"
+                    log "INFO" "Режим маршрутизации по умолчанию: all"
                 fi
             elif [ "$request_method" = "POST" ]; then
                 # Сохранение нового режима маршрутизации
-                local mode=$(echo $data | grep -o '"mode":"[^"]*"' | sed 's/"mode":"//g' | sed 's/"//g')
+                local mode=$(get_json_value "$data" "mode")
 
                 if [ -z "$mode" ]; then
-                    echo "{\"error\":\"Режим маршрутизации не указан\"}"
+                    error_response "400" "Режим маршрутизации не указан"
                     return
                 fi
 
+                # Проверяем допустимые значения режима
+                case "$mode" in
+                    "all"|"selected"|"bypass")
+                        ;;
+                    *)
+                        error_response "400" "Недопустимый режим маршрутизации: $mode"
+                        return
+                        ;;
+                esac
+
                 $MAIN_SCRIPT save_route_mode "$mode" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при сохранении режима маршрутизации"
+                    return
+                fi
 
                 # Перезапускаем VPN для применения изменений
                 local status=$($MAIN_SCRIPT status)
                 if [ "$status" = "running" ]; then
                     $MAIN_SCRIPT restart > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при перезапуске VPN"
+                        return
+                    fi
                 fi
 
                 echo "{\"result\":\"success\",\"message\":\"Режим маршрутизации сохранен\"}"
+                log "INFO" "Режим маршрутизации сохранен: $mode"
             fi
             ;;
 
@@ -152,50 +253,80 @@ handle_request() {
                 # Получение списка маршрутов
                 if [ -f "$CONFIG_DIR/routes.json" ]; then
                     cat "$CONFIG_DIR/routes.json"
+                    log "INFO" "Список маршрутов получен"
                 else
                     echo "{\"vpn\":[],\"direct\":[]}"
+                    log "INFO" "Список маршрутов пуст"
                 fi
             elif [ "$request_method" = "POST" ]; then
                 # Добавление нового маршрута
-                local target=$(echo $data | grep -o '"target":"[^"]*"' | sed 's/"target":"//g' | sed 's/"//g')
-                local type=$(echo $data | grep -o '"type":"[^"]*"' | sed 's/"type":"//g' | sed 's/"//g')
+                local target=$(get_json_value "$data" "target")
+                local type=$(get_json_value "$data" "type")
 
                 if [ -z "$target" ] || [ -z "$type" ]; then
-                    echo "{\"error\":\"Не все обязательные поля заполнены\"}"
+                    error_response "400" "Не все обязательные поля заполнены"
                     return
                 fi
 
+                # Проверяем допустимые значения типа
+                case "$type" in
+                    "vpn"|"direct")
+                        ;;
+                    *)
+                        error_response "400" "Недопустимый тип маршрута: $type"
+                        return
+                        ;;
+                esac
+
                 $MAIN_SCRIPT add_route "$target" "$type" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при добавлении маршрута"
+                    return
+                fi
 
                 # Перезапускаем VPN для применения изменений
                 local status=$($MAIN_SCRIPT status)
                 if [ "$status" = "running" ]; then
                     $MAIN_SCRIPT restart > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при перезапуске VPN"
+                        return
+                    fi
                 fi
 
                 echo "{\"result\":\"success\",\"message\":\"Маршрут добавлен\"}"
+                log "INFO" "Добавлен маршрут: $target ($type)"
             fi
             ;;
 
         "/api/routes/delete")
             if [ "$request_method" = "POST" ]; then
                 # Удаление маршрута
-                local target=$(echo $data | grep -o '"target":"[^"]*"' | sed 's/"target":"//g' | sed 's/"//g')
+                local target=$(get_json_value "$data" "target")
 
                 if [ -z "$target" ]; then
-                    echo "{\"error\":\"Цель маршрута не указана\"}"
+                    error_response "400" "Цель маршрута не указана"
                     return
                 fi
 
                 $MAIN_SCRIPT remove_route "$target" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при удалении маршрута"
+                    return
+                fi
 
                 # Перезапускаем VPN для применения изменений
                 local status=$($MAIN_SCRIPT status)
                 if [ "$status" = "running" ]; then
                     $MAIN_SCRIPT restart > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при перезапуске VPN"
+                        return
+                    fi
                 fi
 
                 echo "{\"result\":\"success\",\"message\":\"Маршрут удален\"}"
+                log "INFO" "Удален маршрут: $target"
             fi
             ;;
 
@@ -204,51 +335,93 @@ handle_request() {
                 # Получение списка устройств
                 if [ -f "$CONFIG_DIR/devices.json" ]; then
                     cat "$CONFIG_DIR/devices.json"
+                    log "INFO" "Список устройств получен"
                 else
                     echo "{\"vpn\":[],\"direct\":[],\"names\":{}}"
+                    log "INFO" "Список устройств пуст"
                 fi
             elif [ "$request_method" = "POST" ]; then
                 # Добавление нового устройства
-                local mac=$(echo $data | grep -o '"mac":"[^"]*"' | sed 's/"mac":"//g' | sed 's/"//g')
-                local name=$(echo $data | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g')
-                local type=$(echo $data | grep -o '"type":"[^"]*"' | sed 's/"type":"//g' | sed 's/"//g')
+                local mac=$(get_json_value "$data" "mac")
+                local name=$(get_json_value "$data" "name")
+                local type=$(get_json_value "$data" "type")
 
                 if [ -z "$mac" ] || [ -z "$name" ] || [ -z "$type" ]; then
-                    echo "{\"error\":\"Не все обязательные поля заполнены\"}"
+                    error_response "400" "Не все обязательные поля заполнены"
                     return
                 fi
 
+                # Проверяем формат MAC-адреса
+                if ! echo "$mac" | grep -qE "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"; then
+                    error_response "400" "Неверный формат MAC-адреса: $mac"
+                    return
+                fi
+
+                # Проверяем допустимые значения типа
+                case "$type" in
+                    "vpn"|"direct")
+                        ;;
+                    *)
+                        error_response "400" "Недопустимый тип устройства: $type"
+                        return
+                        ;;
+                esac
+
                 $MAIN_SCRIPT add_device "$mac" "$name" "$type" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при добавлении устройства"
+                    return
+                fi
 
                 # Перезапускаем VPN для применения изменений
                 local status=$($MAIN_SCRIPT status)
                 if [ "$status" = "running" ]; then
                     $MAIN_SCRIPT restart > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при перезапуске VPN"
+                        return
+                    fi
                 fi
 
                 echo "{\"result\":\"success\",\"message\":\"Устройство добавлено\"}"
+                log "INFO" "Добавлено устройство: $name ($mac, $type)"
             fi
             ;;
 
         "/api/devices/delete")
             if [ "$request_method" = "POST" ]; then
                 # Удаление устройства
-                local mac=$(echo $data | grep -o '"mac":"[^"]*"' | sed 's/"mac":"//g' | sed 's/"//g')
+                local mac=$(get_json_value "$data" "mac")
 
                 if [ -z "$mac" ]; then
-                    echo "{\"error\":\"MAC-адрес устройства не указан\"}"
+                    error_response "400" "MAC-адрес устройства не указан"
+                    return
+                fi
+
+                # Проверяем формат MAC-адреса
+                if ! echo "$mac" | grep -qE "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"; then
+                    error_response "400" "Неверный формат MAC-адреса: $mac"
                     return
                 fi
 
                 $MAIN_SCRIPT remove_device "$mac" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при удалении устройства"
+                    return
+                fi
 
                 # Перезапускаем VPN для применения изменений
                 local status=$($MAIN_SCRIPT status)
                 if [ "$status" = "running" ]; then
                     $MAIN_SCRIPT restart > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при перезапуске VPN"
+                        return
+                    fi
                 fi
 
                 echo "{\"result\":\"success\",\"message\":\"Устройство удалено\"}"
+                log "INFO" "Удалено устройство: $mac"
             fi
             ;;
 
@@ -261,17 +434,32 @@ handle_request() {
                     lines=100
                 fi
 
+                # Ограничиваем количество строк для безопасности
+                if [ "$lines" -gt 1000 ]; then
+                    lines=1000
+                fi
+
                 local logs=$($MAIN_SCRIPT get_logs $lines)
+                if [ $? -ne 0 ]; then
+                    error_response "500" "Ошибка при получении журнала"
+                    return
+                fi
                 echo "{\"logs\":\"$(echo $logs | sed 's/"/\\"/g' | sed 's/\n/\\n/g')\"}"
+                log "INFO" "Журнал получен ($lines строк)"
             elif [ "$request_method" = "POST" ]; then
                 # Очистка журнала
-                local action=$(echo $data | grep -o '"action":"[^"]*"' | sed 's/"action":"//g' | sed 's/"//g')
+                local action=$(get_json_value "$data" "action")
 
                 if [ "$action" = "clear" ]; then
                     $MAIN_SCRIPT clear_logs > /dev/null 2>&1
+                    if [ $? -ne 0 ]; then
+                        error_response "500" "Ошибка при очистке журнала"
+                        return
+                    fi
                     echo "{\"result\":\"success\",\"message\":\"Журнал очищен\"}"
+                    log "INFO" "Журнал очищен"
                 else
-                    echo "{\"error\":\"Неизвестное действие\"}"
+                    error_response "400" "Неизвестное действие: $action"
                 fi
             fi
             ;;
@@ -318,12 +506,10 @@ handle_request() {
 
                 # Выводим содержимое файла
                 cat "$file_path"
+                log "INFO" "Отправлен файл: $file_path"
             else
                 # Файл не найден, возвращаем 404
-                echo "HTTP/1.1 404 Not Found"
-                echo "Content-Type: application/json"
-                echo ""
-                echo "{\"error\":\"Not Found\",\"message\":\"Запрошенный ресурс не найден\",\"path\":\"$request_uri\"}"
+                error_response "404" "Запрошенный ресурс не найден: $request_uri"
             fi
             ;;
     esac
@@ -335,13 +521,18 @@ start_server() {
 
     # Проверяем, запущен ли уже сервер
     if netstat -tln | grep -q ":$port "; then
+        log "WARNING" "Сервер уже запущен на порту $port"
         echo "Сервер уже запущен на порту $port"
         return 1
     fi
 
+    log "INFO" "Запуск HTTP-сервера на порту $port"
+    echo "Запуск HTTP-сервера на порту $port..."
+
     # Запускаем HTTP-сервер на указанном порту
     while true; do
         nc -l -p $port -e "$0" handle_request
+        log "INFO" "Обработан запрос"
     done
 }
 
