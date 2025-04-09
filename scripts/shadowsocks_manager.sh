@@ -64,13 +64,30 @@ check_dependencies() {
     if [ ! -f /opt/bin/ss-redir ]; then
         log "INFO" "Shadowsocks-libev не установлен. Устанавливаем..."
 
-        # Запускаем opkg с таймаутом
+        # Сначала обновляем репозитории
+        log "INFO" "Обновление репозиториев пакетов..."
         timeout $OPKG_TIMEOUT opkg update || {
             log "ERROR" "Таймаут при обновлении пакетов"
             return 1
         }
 
-        timeout $OPKG_TIMEOUT opkg install shadowsocks-libev-ss-local shadowsocks-libev-ss-redir || {
+        # Устанавливаем базовые зависимости
+        log "INFO" "Установка базовых зависимостей..."
+        for pkg in libuci libuci-lua libustream-openssl; do
+            log "INFO" "Установка пакета $pkg..."
+            timeout $OPKG_TIMEOUT opkg install $pkg || {
+                log "WARNING" "Не удалось установить пакет $pkg, пробуем альтернативный репозиторий"
+                # Пробуем установить из альтернативного репозитория
+                timeout $OPKG_TIMEOUT opkg install --force-depends $pkg || {
+                    log "ERROR" "Не удалось установить пакет $pkg даже с принудительной установкой"
+                    return 1
+                }
+            }
+        done
+
+        # Теперь устанавливаем shadowsocks-libev
+        log "INFO" "Установка shadowsocks-libev..."
+        timeout $OPKG_TIMEOUT opkg install --force-depends shadowsocks-libev-ss-local shadowsocks-libev-ss-redir || {
             log "ERROR" "Таймаут при установке shadowsocks-libev"
             return 1
         }
@@ -92,10 +109,33 @@ check_dependencies() {
 
     # Проверяем наличие ipset
     if [ ! -f /sbin/ipset ]; then
-        log "ERROR" "ipset не найден"
-        return 1
+        log "INFO" "Установка ipset..."
+        timeout $OPKG_TIMEOUT opkg install --force-depends ipset || {
+            log "ERROR" "Не удалось установить ipset"
+            return 1
+        }
+
+        if [ ! -f /sbin/ipset ]; then
+            log "ERROR" "ipset не найден после установки"
+            return 1
+        fi
     fi
 
+    # Проверяем наличие iptables
+    if [ ! -f /usr/sbin/iptables ]; then
+        log "INFO" "Установка iptables..."
+        timeout $OPKG_TIMEOUT opkg install --force-depends iptables || {
+            log "ERROR" "Не удалось установить iptables"
+            return 1
+        }
+
+        if [ ! -f /usr/sbin/iptables ]; then
+            log "ERROR" "iptables не найден после установки"
+            return 1
+        fi
+    fi
+
+    log "INFO" "Все зависимости успешно установлены"
     return 0
 }
 
