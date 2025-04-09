@@ -30,11 +30,13 @@ log() {
     # Проверяем размер лог-файла
     if [ -f "$LOG_FILE" ]; then
         local size=$(stat -f %z "$LOG_FILE" 2>/dev/null || stat -c %s "$LOG_FILE" 2>/dev/null)
-        if [ "$size" -gt "$MAX_LOG_SIZE" ]; then
-            local timestamp=$(date "+%Y%m%d_%H%M%S")
-            mv "$LOG_FILE" "$LOG_FILE.$timestamp"
-            touch "$LOG_FILE"
-            log "INFO" "Выполнена ротация лог-файла"
+        if [ "$size" -gt 0 ] 2>/dev/null; then
+            if [ "$size" -gt "$MAX_LOG_SIZE" ]; then
+                local timestamp=$(date "+%Y%m%d_%H%M%S")
+                mv "$LOG_FILE" "$LOG_FILE.$timestamp"
+                touch "$LOG_FILE"
+                log "INFO" "Выполнена ротация лог-файла"
+            fi
         fi
     fi
 }
@@ -576,9 +578,35 @@ start_server() {
             # OpenBSD версия netcat
             nc -l $port -e "$0" handle_request
         else
-            # Пробуем альтернативный вариант без -e (для некоторых версий)
-            log "WARNING" "Используется альтернативный метод запуска netcat"
-            nc -l $port | "$0" handle_request
+            # BusyBox версия netcat (не поддерживает -l)
+            log "WARNING" "Используется BusyBox netcat, запуск через socat"
+
+            # Проверяем наличие socat
+            if command -v socat >/dev/null 2>&1; then
+                socat TCP-LISTEN:$port,fork EXEC:"$0 handle_request"
+            else
+                # Если socat не установлен, пробуем использовать встроенный HTTP-сервер
+                log "WARNING" "socat не найден, используем встроенный HTTP-сервер"
+
+                # Создаем временный файл для сокета
+                local socket_file="/tmp/shadowsocks_api.sock"
+                rm -f "$socket_file"
+
+                # Запускаем встроенный HTTP-сервер
+                (
+                    while true; do
+                        # Ожидаем подключения
+                        (echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nAPI Server Running"; sleep 1) | nc -e "$0" handle_request $port
+                        sleep 1
+                    done
+                ) &
+
+                # Сохраняем PID фонового процесса
+                echo $! > "$PID_FILE"
+
+                # Ждем завершения фонового процесса
+                wait
+            fi
         fi
 
         # Проверяем, не был ли процесс убит
