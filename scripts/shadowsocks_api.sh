@@ -7,6 +7,8 @@ MAIN_SCRIPT="$SCRIPT_DIR/shadowsocks_manager.sh"
 CONFIG_DIR="/jffs/configs/shadowsocks"
 WEB_DIR="/jffs/www/shadowsocks"
 LOG_FILE="$CONFIG_DIR/api.log"
+PID_FILE="/tmp/shadowsocks_api.pid"
+MAX_LOG_SIZE=10485760  # 10MB в байтах
 
 # Функция для логирования
 log() {
@@ -14,7 +16,27 @@ log() {
     shift
     local message="$*"
     local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+
+    # Проверяем существование директории для логов
+    if [ ! -d "$CONFIG_DIR" ]; then
+        mkdir -p "$CONFIG_DIR" || {
+            echo "Ошибка: Не удалось создать директорию $CONFIG_DIR"
+            return 1
+        }
+    fi
+
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+
+    # Проверяем размер лог-файла
+    if [ -f "$LOG_FILE" ]; then
+        local size=$(stat -f %z "$LOG_FILE" 2>/dev/null || stat -c %s "$LOG_FILE" 2>/dev/null)
+        if [ "$size" -gt "$MAX_LOG_SIZE" ]; then
+            local timestamp=$(date "+%Y%m%d_%H%M%S")
+            mv "$LOG_FILE" "$LOG_FILE.$timestamp"
+            touch "$LOG_FILE"
+            log "INFO" "Выполнена ротация лог-файла"
+        fi
+    fi
 }
 
 # Функция для вывода ошибки
@@ -32,8 +54,15 @@ error_response() {
 }
 
 # Создаем необходимые директории
-mkdir -p $CONFIG_DIR
-mkdir -p $WEB_DIR
+mkdir -p "$CONFIG_DIR" || {
+    echo "Ошибка: Не удалось создать директорию $CONFIG_DIR"
+    exit 1
+}
+
+mkdir -p "$WEB_DIR" || {
+    echo "Ошибка: Не удалось создать директорию $WEB_DIR"
+    exit 1
+}
 
 # Проверяем наличие основного скрипта
 if [ ! -x "$MAIN_SCRIPT" ]; then
@@ -74,6 +103,11 @@ get_json_number() {
     echo "$json" | grep -o "\"$key\":[0-9]*" | sed "s/\"$key\"://g"
 }
 
+# Функция для безопасного экранирования JSON
+escape_json() {
+    echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g'
+}
+
 # Функция для обработки запросов API
 handle_request() {
     local request_method=$1
@@ -104,7 +138,7 @@ handle_request() {
                 error_response "500" "Ошибка при получении статуса VPN"
                 return
             fi
-            echo "{\"status\":\"$status\"}"
+            echo "{\"status\":\"$(escape_json "$status")\"}"
             log "INFO" "Статус VPN: $status"
             ;;
 
@@ -444,7 +478,7 @@ handle_request() {
                     error_response "500" "Ошибка при получении журнала"
                     return
                 fi
-                echo "{\"logs\":\"$(echo $logs | sed 's/"/\\"/g' | sed 's/\n/\\n/g')\"}"
+                echo "{\"logs\":\"$(escape_json "$logs")\"}"
                 log "INFO" "Журнал получен ($lines строк)"
             elif [ "$request_method" = "POST" ]; then
                 # Очистка журнала
@@ -529,6 +563,9 @@ start_server() {
     log "INFO" "Запуск HTTP-сервера на порту $port"
     echo "Запуск HTTP-сервера на порту $port..."
 
+    # Сохраняем PID текущего процесса
+    echo $$ > "$PID_FILE"
+
     # Запускаем HTTP-сервер на указанном порту
     while true; do
         # Проверяем версию netcat
@@ -543,8 +580,38 @@ start_server() {
             log "WARNING" "Используется альтернативный метод запуска netcat"
             nc -l $port | "$0" handle_request
         fi
+
+        # Проверяем, не был ли процесс убит
+        if [ ! -f "$PID_FILE" ] || [ "$(cat "$PID_FILE")" != "$$" ]; then
+            log "WARNING" "Процесс был перезапущен, завершаем текущий экземпляр"
+            exit 0
+        fi
+
         log "INFO" "Обработан запрос"
     done
+}
+
+# Функция для остановки сервера
+stop_server() {
+    if [ -f "$PID_FILE" ]; then
+        local pid=$(cat "$PID_FILE")
+        if kill -0 $pid 2>/dev/null; then
+            kill $pid
+            rm -f "$PID_FILE"
+            log "INFO" "Сервер остановлен"
+            echo "Сервер остановлен"
+            return 0
+        else
+            rm -f "$PID_FILE"
+            log "WARNING" "Процесс сервера не найден"
+            echo "Процесс сервера не найден"
+            return 1
+        fi
+    else
+        log "WARNING" "PID-файл не найден"
+        echo "PID-файл не найден"
+        return 1
+    fi
 }
 
 # Запускаем функцию в зависимости от аргументов командной строки
@@ -557,8 +624,18 @@ case "$1" in
         # Запуск HTTP-сервера
         start_server
         ;;
+    stop)
+        # Остановка HTTP-сервера
+        stop_server
+        ;;
+    restart)
+        # Перезапуск HTTP-сервера
+        stop_server
+        sleep 1
+        start_server
+        ;;
     *)
-        echo "Использование: $0 {start}"
+        echo "Использование: $0 {start|stop|restart}"
         exit 1
         ;;
 esac
