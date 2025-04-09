@@ -103,7 +103,7 @@ fi
 echo "Проверка исходных файлов..."
 [ -f "$CURRENT_DIR/scripts/shadowsocks_manager.sh" ] || error_exit "Файл shadowsocks_manager.sh не найден"
 [ -f "$CURRENT_DIR/scripts/shadowsocks_api.sh" ] || error_exit "Файл shadowsocks_api.sh не найден"
-[ -f "$CURRENT_DIR/scripts/post-mount.sh" ] || error_exit "Файл post-mount не найден"
+[ -f "$CURRENT_DIR/scripts/post_mount.sh" ] || error_exit "Файл post_mount.sh не найден"
 [ -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" ] || error_exit "Файл shadowsocks_daemon.sh не найден"
 [ -f "$CURRENT_DIR/web/index.html" ] || error_exit "Файл index.html не найден"
 
@@ -115,8 +115,8 @@ fi
 if [ -f "$SCRIPT_DIR/shadowsocks_api.sh" ]; then
     cp "$SCRIPT_DIR/shadowsocks_api.sh" "$SCRIPT_DIR/shadowsocks_api.sh.bak" || echo "Предупреждение: Не удалось создать резервную копию shadowsocks_api.sh"
 fi
-if [ -f "$SCRIPT_DIR/post-mount.sh" ]; then
-    cp "$SCRIPT_DIR/post-mount.sh" "$SCRIPT_DIR/post-mount.sh.bak" || echo "Предупреждение: Не удалось создать резервную копию post-mount.sh"
+if [ -f "$SCRIPT_DIR/post_mount.sh" ]; then
+    cp "$SCRIPT_DIR/post_mount.sh" "$SCRIPT_DIR/post_mount.sh.bak" || echo "Предупреждение: Не удалось создать резервную копию post_mount.sh"
 fi
 if [ -f "$SCRIPT_DIR/shadowsocks_daemon.sh" ]; then
     cp "$SCRIPT_DIR/shadowsocks_daemon.sh" "$SCRIPT_DIR/shadowsocks_daemon.sh.bak" || echo "Предупреждение: Не удалось создать резервную копию shadowsocks_daemon.sh"
@@ -126,7 +126,7 @@ fi
 echo "Копирование скриптов..."
 cp -f "$CURRENT_DIR/scripts/shadowsocks_manager.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_manager.sh"
 cp -f "$CURRENT_DIR/scripts/shadowsocks_api.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_api.sh"
-cp -f "$CURRENT_DIR/scripts/post-mount.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать post-mount.sh"
+cp -f "$CURRENT_DIR/scripts/post_mount.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать post_mount.sh"
 cp -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_daemon.sh"
 
 # Копируем веб-интерфейс
@@ -153,7 +153,7 @@ fi
 echo "Установка прав на выполнение..."
 chmod +x $SCRIPT_DIR/shadowsocks_manager.sh || error_exit "Не удалось установить права на выполнение для shadowsocks_manager.sh"
 chmod +x $SCRIPT_DIR/shadowsocks_api.sh || error_exit "Не удалось установить права на выполнение для shadowsocks_api.sh"
-chmod +x $SCRIPT_DIR/post-mount.sh || error_exit "Не удалось установить права на выполнение для post-mount.sh"
+chmod +x $SCRIPT_DIR/post_mount.sh || error_exit "Не удалось установить права на выполнение для post_mount.sh"
 chmod +x $SCRIPT_DIR/shadowsocks_daemon.sh || error_exit "Не удалось установить права на выполнение для shadowsocks_daemon.sh"
 
 # Включаем автозапуск Shadowsocks
