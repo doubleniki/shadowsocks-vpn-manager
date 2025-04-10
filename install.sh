@@ -135,6 +135,7 @@ print_message "INFO" "Проверка исходных файлов..."
 [ -f "$CURRENT_DIR/scripts/shadowsocks_api.sh" ] || error_exit "Файл shadowsocks_api.sh не найден"
 [ -f "$CURRENT_DIR/scripts/post_mount.sh" ] || error_exit "Файл post_mount.sh не найден"
 [ -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" ] || error_exit "Файл shadowsocks_daemon.sh не найден"
+[ -f "$CURRENT_DIR/scripts/uninstall.sh" ] || error_exit "Файл uninstall.sh не найден"
 [ -f "$CURRENT_DIR/web/index.html" ] || error_exit "Файл index.html не найден"
 
 # Создаем резервные копии существующих файлов
@@ -161,7 +162,7 @@ cp -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" "$SCRIPT_DIR/" || error_exit 
 
 # Копируем скрипт удаления
 print_message "INFO" "Копирование скрипта удаления..."
-cp -f "$CURRENT_DIR/uninstall.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать uninstall.sh"
+cp -f "$CURRENT_DIR/scripts/uninstall.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать uninstall.sh"
 chmod +x "$SCRIPT_DIR/uninstall.sh" || error_exit "Не удалось установить права на выполнение для uninstall.sh"
 
 # Копируем веб-интерфейс
