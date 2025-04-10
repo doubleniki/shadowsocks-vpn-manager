@@ -1,11 +1,14 @@
 #!/bin/sh
 # Установочный скрипт для Shadowsocks VPN Manager
 
+# Подключаем общие функции
+. "$(dirname "$0")/scripts/common.sh"
+
 # Определяем директории
 SCRIPT_DIR="/jffs/scripts"
 CONFIG_DIR="/jffs/configs/shadowsocks"
 WEB_DIR="/jffs/www/shadowsocks"
-CURRENT_DIR=$(dirname $(readlink -f "$0"))
+CURRENT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # Цветовые коды
 RED='\033[0;31m'
@@ -45,202 +48,55 @@ error_exit() {
     exit 1
 }
 
-# Проверяем наличие JFFS раздела
-if [ ! -d "/jffs" ]; then
-    error_exit "JFFS раздел не найден или не активирован. Пожалуйста, активируйте JFFS custom scripts в настройках роутера (Administration -> System)"
-fi
+# Проверяем наличие необходимых компонентов
+check_entware
+check_jffs
+check_system_libraries
 
 # Создаем необходимые директории
-print_message "INFO" "Создание директорий..."
-mkdir -p $SCRIPT_DIR || error_exit "Не удалось создать директорию $SCRIPT_DIR"
-mkdir -p $CONFIG_DIR || error_exit "Не удалось создать директорию $CONFIG_DIR"
-mkdir -p $WEB_DIR || error_exit "Не удалось создать директорию $WEB_DIR"
+create_directory "$CONFIG_DIR" "конфигурации"
+create_directory "$WEB_DIR" "веб-интерфейса"
 
-# Проверяем наличие Entware
-if [ ! -f "/opt/bin/opkg" ]; then
-    error_exit "Entware не установлен. Пожалуйста, установите Entware через веб-интерфейс роутера (Administration -> System)"
-fi
-
-# Устанавливаем необходимые пакеты
-print_message "INFO" "Установка необходимых пакетов..."
-opkg update || error_exit "Не удалось обновить список пакетов"
-
-# Проверяем наличие shadowsocks-libev
-print_message "INFO" "Проверка наличия shadowsocks-libev..."
-if [ ! -f "/opt/bin/ss-redir" ]; then
-    print_message "INFO" "Установка shadowsocks-libev..."
-    opkg install shadowsocks-libev-ss-local shadowsocks-libev-ss-redir || error_exit "Не удалось установить shadowsocks-libev"
-else
-    print_message "INFO" "shadowsocks-libev уже установлен."
-fi
-
-# Проверяем наличие bash
-print_message "INFO" "Проверка наличия bash..."
-if [ ! -f "/opt/bin/bash" ]; then
-    print_message "INFO" "Установка bash..."
-    opkg install bash || error_exit "Не удалось установить bash"
-else
-    print_message "INFO" "bash уже установлен."
-fi
-
-# Проверяем наличие nano
-print_message "INFO" "Проверка наличия nano..."
-if [ ! -f "/opt/bin/nano" ]; then
-    print_message "INFO" "Установка nano..."
-    opkg install nano || error_exit "Не удалось установить nano"
-else
-    print_message "INFO" "nano уже установлен."
-fi
-
-# Проверяем наличие netcat
-print_message "INFO" "Проверка наличия netcat..."
-if [ ! -f "/opt/bin/netcat" ]; then
-    print_message "INFO" "Установка netcat..."
-    opkg install netcat || error_exit "Не удалось установить netcat"
-else
-    print_message "INFO" "netcat уже установлен."
-fi
-
-# Проверяем наличие ipset
-print_message "INFO" "Проверка наличия ipset..."
-if [ ! -f "/sbin/ipset" ]; then
-    print_message "INFO" "Установка ipset..."
-    opkg install ipset || error_exit "Не удалось установить ipset"
-else
-    print_message "INFO" "ipset уже установлен."
-fi
-
-# Проверяем наличие системных библиотек
-print_message "INFO" "Проверка системных библиотек..."
-if [ ! -f "/usr/lib/libuci.so" ]; then
-    print_message "ERROR" "libuci не найден. Это критическая ошибка, так как библиотека должна быть в прошивке."
-    error_exit "Отсутствует критическая системная библиотека libuci"
-fi
-
-if [ ! -f "/usr/lib/lua/luci/model/uci.lua" ]; then
-    print_message "ERROR" "libuci-lua не найден. Это критическая ошибка, так как библиотека должна быть в прошивке."
-    error_exit "Отсутствует критическая системная библиотека libuci-lua"
-fi
-
-if [ ! -f "/usr/lib/libustream-openssl.so" ]; then
-    print_message "ERROR" "libustream-openssl не найден. Это критическая ошибка, так как библиотека должна быть в прошивке."
-    error_exit "Отсутствует критическая системная библиотека libustream-openssl"
-fi
-
-print_message "INFO" "Все необходимые системные библиотеки найдены."
-
-# Проверяем наличие исходных файлов
-print_message "INFO" "Проверка исходных файлов..."
+# Проверяем наличие необходимых файлов
+[ -f "$CURRENT_DIR/scripts/uninstall.sh" ] || error_exit "Файл uninstall.sh не найден"
 [ -f "$CURRENT_DIR/scripts/shadowsocks_manager.sh" ] || error_exit "Файл shadowsocks_manager.sh не найден"
 [ -f "$CURRENT_DIR/scripts/shadowsocks_api.sh" ] || error_exit "Файл shadowsocks_api.sh не найден"
-[ -f "$CURRENT_DIR/scripts/post_mount.sh" ] || error_exit "Файл post_mount.sh не найден"
 [ -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" ] || error_exit "Файл shadowsocks_daemon.sh не найден"
-[ -f "$CURRENT_DIR/scripts/uninstall.sh" ] || error_exit "Файл uninstall.sh не найден"
-[ -f "$CURRENT_DIR/web/index.html" ] || error_exit "Файл index.html не найден"
+[ -f "$CURRENT_DIR/scripts/post-mount.sh" ] || error_exit "Файл post-mount.sh не найден"
 
-# Создаем резервные копии существующих файлов
-print_message "INFO" "Создание резервных копий..."
-if [ -f "$SCRIPT_DIR/shadowsocks_manager.sh" ]; then
-    cp "$SCRIPT_DIR/shadowsocks_manager.sh" "$SCRIPT_DIR/shadowsocks_manager.sh.bak" || print_message "WARNING" "Предупреждение: Не удалось создать резервную копию shadowsocks_manager.sh"
-fi
-if [ -f "$SCRIPT_DIR/shadowsocks_api.sh" ]; then
-    cp "$SCRIPT_DIR/shadowsocks_api.sh" "$SCRIPT_DIR/shadowsocks_api.sh.bak" || print_message "WARNING" "Предупреждение: Не удалось создать резервную копию shadowsocks_api.sh"
-fi
-if [ -f "$SCRIPT_DIR/post_mount.sh" ]; then
-    cp "$SCRIPT_DIR/post_mount.sh" "$SCRIPT_DIR/post_mount.sh.bak" || print_message "WARNING" "Предупреждение: Не удалось создать резервную копию post_mount.sh"
-fi
-if [ -f "$SCRIPT_DIR/shadowsocks_daemon.sh" ]; then
-    cp "$SCRIPT_DIR/shadowsocks_daemon.sh" "$SCRIPT_DIR/shadowsocks_daemon.sh.bak" || print_message "WARNING" "Предупреждение: Не удалось создать резервную копию shadowsocks_daemon.sh"
-fi
+# Копируем скрипты
+copy_file "$CURRENT_DIR/scripts/uninstall.sh" "$SCRIPT_DIR/" "uninstall.sh"
+copy_file "$CURRENT_DIR/scripts/shadowsocks_manager.sh" "$SCRIPT_DIR/" "shadowsocks_manager.sh"
+copy_file "$CURRENT_DIR/scripts/shadowsocks_api.sh" "$SCRIPT_DIR/" "shadowsocks_api.sh"
+copy_file "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" "$SCRIPT_DIR/" "shadowsocks_daemon.sh"
+copy_file "$CURRENT_DIR/scripts/post-mount.sh" "$SCRIPT_DIR/" "post-mount.sh"
 
-# Копируем скрипты из репозитория
-print_message "INFO" "Копирование скриптов..."
-cp -f "$CURRENT_DIR/scripts/shadowsocks_manager.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_manager.sh"
-cp -f "$CURRENT_DIR/scripts/shadowsocks_api.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_api.sh"
-cp -f "$CURRENT_DIR/scripts/post_mount.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать post_mount.sh"
-cp -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_daemon.sh"
+# Устанавливаем права на выполнение
+set_executable "$SCRIPT_DIR/uninstall.sh" "uninstall.sh"
+set_executable "$SCRIPT_DIR/shadowsocks_manager.sh" "shadowsocks_manager.sh"
+set_executable "$SCRIPT_DIR/shadowsocks_api.sh" "shadowsocks_api.sh"
+set_executable "$SCRIPT_DIR/shadowsocks_daemon.sh" "shadowsocks_daemon.sh"
+set_executable "$SCRIPT_DIR/post-mount.sh" "post-mount.sh"
 
-# Копируем скрипт удаления
-print_message "INFO" "Копирование скрипта удаления..."
-cp -f "$CURRENT_DIR/scripts/uninstall.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать uninstall.sh"
-chmod +x "$SCRIPT_DIR/uninstall.sh" || error_exit "Не удалось установить права на выполнение для uninstall.sh"
+# Устанавливаем необходимые пакеты
+install_package "shadowsocks-libev" "/opt/bin/ss-server" "shadowsocks-libev"
+install_package "wget" "/opt/bin/wget" "wget"
+install_package "curl" "/opt/bin/curl" "curl"
+install_package "jq" "/opt/bin/jq" "jq"
 
-# Копируем веб-интерфейс
-print_message "INFO" "Копирование веб-интерфейса..."
-cp -f "$CURRENT_DIR/web/index.html" "$WEB_DIR/" || error_exit "Не удалось скопировать index.html"
-
-# Копируем дополнительные файлы веб-интерфейса, если они существуют
-if [ -d "$CURRENT_DIR/web/css" ]; then
-    mkdir -p "$WEB_DIR/css" || error_exit "Не удалось создать директорию $WEB_DIR/css"
-    cp -rf "$CURRENT_DIR/web/css/"* "$WEB_DIR/css/" || print_message "WARNING" "Предупреждение: Не удалось скопировать CSS файлы"
+# Создаем резервную копию конфигурации, если она существует
+if [ -f "$CONFIG_DIR/config.json" ]; then
+    cp "$CONFIG_DIR/config.json" "$CONFIG_DIR/config.json.bak" || print_message "WARNING" "Не удалось создать резервную копию конфигурации"
 fi
 
-if [ -d "$CURRENT_DIR/web/js" ]; then
-    mkdir -p "$WEB_DIR/js" || error_exit "Не удалось создать директорию $WEB_DIR/js"
-    cp -rf "$CURRENT_DIR/web/js/"* "$WEB_DIR/js/" || print_message "WARNING" "Предупреждение: Не удалось скопировать JS файлы"
-fi
+# Копируем конфигурацию по умолчанию
+copy_file "$CURRENT_DIR/config/config.json" "$CONFIG_DIR/" "config.json"
 
-if [ -d "$CURRENT_DIR/web/img" ]; then
-    mkdir -p "$WEB_DIR/img" || error_exit "Не удалось создать директорию $WEB_DIR/img"
-    cp -rf "$CURRENT_DIR/web/img/"* "$WEB_DIR/img/" || print_message "WARNING" "Предупреждение: Не удалось скопировать изображения"
-fi
+# Копируем файлы веб-интерфейса
+copy_file "$CURRENT_DIR/www/index.html" "$WEB_DIR/" "index.html"
+copy_file "$CURRENT_DIR/www/style.css" "$WEB_DIR/" "style.css"
+copy_file "$CURRENT_DIR/www/script.js" "$WEB_DIR/" "script.js"
 
-# Делаем скрипты исполняемыми
-print_message "INFO" "Установка прав на выполнение..."
-chmod +x $SCRIPT_DIR/shadowsocks_manager.sh || error_exit "Не удалось установить права на выполнение для shadowsocks_manager.sh"
-chmod +x $SCRIPT_DIR/shadowsocks_api.sh || error_exit "Не удалось установить права на выполнение для shadowsocks_api.sh"
-chmod +x $SCRIPT_DIR/post_mount.sh || error_exit "Не удалось установить права на выполнение для post_mount.sh"
-chmod +x $SCRIPT_DIR/shadowsocks_daemon.sh || error_exit "Не удалось установить права на выполнение для shadowsocks_daemon.sh"
-
-# Включаем автозапуск Shadowsocks
-print_message "INFO" "Настройка автозапуска..."
-touch $CONFIG_DIR/autostart || error_exit "Не удалось создать файл autostart"
-
-# Спрашиваем пользователя о включении веб-интерфейса
-read -p "Включить веб-интерфейс? (y/n): " enable_webui
-if [ "$enable_webui" = "y" ] || [ "$enable_webui" = "Y" ]; then
-    # Включаем веб-интерфейс
-    touch $CONFIG_DIR/webui_enabled || error_exit "Не удалось создать файл webui_enabled"
-
-    # Проверяем, не занят ли порт 8080
-    if netstat -tuln | grep -q ":8080 "; then
-        print_message "WARNING" "Предупреждение: Порт 8080 уже используется. Веб-интерфейс может быть недоступен."
-    fi
-
-    # Запускаем веб-интерфейс
-    print_message "INFO" "Запуск веб-интерфейса..."
-    $SCRIPT_DIR/shadowsocks_api.sh start || error_exit "Не удалось запустить веб-интерфейс"
-fi
-
-# Выводим инструкцию по использованию
-print_message "INFO" ""
-print_message "INFO" "Установка Shadowsocks VPN Manager успешно завершена!"
-print_message "INFO" ""
-if [ "$enable_webui" = "y" ] || [ "$enable_webui" = "Y" ]; then
-    print_message "INFO" "Веб-интерфейс доступен по адресу: http://$(ip -o -4 addr show br0 | awk '{print $4}' | cut -d'/' -f1):8080"
-    print_message "INFO" ""
-fi
-print_message "INFO" "Управление через командную строку:"
-print_message "INFO" "  Запуск VPN:       $SCRIPT_DIR/shadowsocks_manager.sh start"
-print_message "INFO" "  Остановка VPN:    $SCRIPT_DIR/shadowsocks_manager.sh stop"
-print_message "INFO" "  Перезапуск VPN:   $SCRIPT_DIR/shadowsocks_manager.sh restart"
-print_message "INFO" "  Проверка статуса: $SCRIPT_DIR/shadowsocks_manager.sh status"
-print_message "INFO" ""
-print_message "INFO" "Управление автозапуском и веб-интерфейсом:"
-print_message "INFO" "  $SCRIPT_DIR/shadowsocks_daemon.sh {enable-autostart|disable-autostart|enable-webui|disable-webui|start-webui|stop-webui}"
-print_message "INFO" ""
-print_message "INFO" "Для удаления Shadowsocks VPN Manager используйте:"
-print_message "INFO" "  $SCRIPT_DIR/uninstall.sh"
-print_message "INFO" ""
-print_message "INFO" "Пожалуйста, перезагрузите роутер для активации всех функций."
-
-# Спрашиваем, хочет ли пользователь удалить исходные файлы
-read -p "Удалить исходные файлы проекта? (y/n): " answer
-if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
-    print_message "INFO" "Удаление исходных файлов..."
-    cd ..
-    rm -rf "$CURRENT_DIR" || error_exit "Не удалось удалить исходные файлы"
-    print_message "INFO" "Исходные файлы удалены."
-fi
-
-exit 0
+print_message "INFO" "Установка Shadowsocks VPN Manager завершена успешно"
+print_message "INFO" "Для доступа к веб-интерфейсу откройте http://<IP-адрес_роутера>:8080/shadowsocks/"
+print_message "INFO" "Для удаления Shadowsocks VPN Manager выполните скрипт uninstall.sh"

@@ -1,0 +1,48 @@
+{
+  "routes": [
+    {
+      "name": "Китайские сервисы",
+      "description": "Маршрутизация для китайских сервисов",
+      "type": "domain",
+      "rules": [
+        "*.baidu.com",
+        "*.qq.com",
+        "*.taobao.com",
+        "*.jd.com",
+        "*.weibo.com",
+        "*.163.com",
+        "*.126.com",
+        "*.sina.com.cn",
+        "*.sohu.com",
+        "*.sogou.com"
+      ]
+    },
+    {
+      "name": "Российские сервисы",
+      "description": "Маршрутизация для российских сервисов",
+      "type": "domain",
+      "rules": [
+        "*.yandex.ru",
+        "*.mail.ru",
+        "*.vk.com",
+        "*.rutracker.org",
+        "*.rutor.org",
+        "*.kinopoisk.ru",
+        "*.ivi.ru",
+        "*.ok.ru",
+        "*.rambler.ru",
+        "*.lenta.ru"
+      ]
+    },
+    {
+      "name": "Локальная сеть",
+      "description": "Маршрутизация для локальной сети",
+      "type": "ip",
+      "rules": [
+        "192.168.0.0/16",
+        "10.0.0.0/8",
+        "172.16.0.0/12"
+      ]
+    }
+  ]
+}
