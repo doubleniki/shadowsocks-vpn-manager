@@ -7,14 +7,42 @@ LOG_FILE="$CONFIG_DIR/post_mount.log"
 MANAGER_SCRIPT="$SCRIPT_DIR/shadowsocks_manager.sh"
 API_SCRIPT="$SCRIPT_DIR/shadowsocks_api.sh"
 
+# Цветовые коды
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Функция для логирования
 log() {
     local level=$1
     shift
     local message="$*"
     local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    local color=""
+
+    # Выбираем цвет в зависимости от уровня сообщения
+    case "$level" in
+        "ERROR")
+            color=$RED
+            ;;
+        "WARNING")
+            color=$YELLOW
+            ;;
+        "INFO")
+            color=$GREEN
+            ;;
+        "DEBUG")
+            color=$BLUE
+            ;;
+    esac
+
+    # Записываем в лог-файл без цветов
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
-    echo "$message"
+
+    # Выводим в консоль с цветом
+    echo -e "${color}[$timestamp] [$level] $message${NC}"
 }
 
 # Функция для проверки наличия скрипта
@@ -74,7 +102,7 @@ if [ -f "$CONFIG_DIR/autostart" ]; then
     fi
 fi
 
-# Запускаем HTTP-сервер для управления Shadowsocks
+# Запускаем HTTP-сервер для управления Shadowsocks только если веб-интерфейс включен
 if [ -f "$CONFIG_DIR/webui_enabled" ]; then
     log "INFO" "Обнаружен файл включения веб-интерфейса"
 
@@ -87,6 +115,8 @@ if [ -f "$CONFIG_DIR/webui_enabled" ]; then
             log "ERROR" "Ошибка при запуске HTTP-сервера"
         fi
     fi
+else
+    log "INFO" "Веб-интерфейс отключен"
 fi
 
 exit 0

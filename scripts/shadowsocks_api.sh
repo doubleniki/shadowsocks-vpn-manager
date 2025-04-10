@@ -10,22 +10,42 @@ LOG_FILE="$CONFIG_DIR/api.log"
 PID_FILE="/tmp/shadowsocks_api.pid"
 MAX_LOG_SIZE=10485760  # 10MB в байтах
 
+# Цветовые коды
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Функция для логирования
 log() {
     local level=$1
     shift
     local message="$*"
     local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    local color=""
 
-    # Проверяем существование директории для логов
-    if [ ! -d "$CONFIG_DIR" ]; then
-        mkdir -p "$CONFIG_DIR" || {
-            echo "Ошибка: Не удалось создать директорию $CONFIG_DIR"
-            return 1
-        }
-    fi
+    # Выбираем цвет в зависимости от уровня сообщения
+    case "$level" in
+        "ERROR")
+            color=$RED
+            ;;
+        "WARNING")
+            color=$YELLOW
+            ;;
+        "INFO")
+            color=$GREEN
+            ;;
+        "DEBUG")
+            color=$BLUE
+            ;;
+    esac
 
+    # Записываем в лог-файл без цветов
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+
+    # Выводим в консоль с цветом
+    echo -e "${color}[$timestamp] [$level] $message${NC}"
 
     # Проверяем размер лог-файла
     if [ -f "$LOG_FILE" ]; then

@@ -1,24 +1,44 @@
 #!/bin/sh
 
-# Путь к файлам
+# Пути к файлам
 CONFIG_DIR="/jffs/configs/shadowsocks"
 SCRIPT_DIR="/jffs/scripts"
+API_SCRIPT="$SCRIPT_DIR/shadowsocks_api.sh"
 API_PID_FILE="/tmp/shadowsocks_api.pid"
 LOG_FILE="$CONFIG_DIR/daemon.log"
-API_SCRIPT="$SCRIPT_DIR/shadowsocks_api.sh"
 MAX_LOG_SIZE=10485760  # 10MB в байтах
+
+# Цветовые коды
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
 # Функция для логирования
 log() {
     local level=$1
     shift
     local message="$*"
-    local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-    echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
-    echo "$message"
+    local color=""
 
-    # Проверяем размер лог-файла
-    check_log_size
+    # Выбираем цвет в зависимости от уровня сообщения
+    case "$level" in
+        "ERROR")
+            color=$RED
+            ;;
+        "WARNING")
+            color=$YELLOW
+            ;;
+        "INFO")
+            color=$GREEN
+            ;;
+        "DEBUG")
+            color=$BLUE
+            ;;
+    esac
+
+    echo -e "${color}[$level] $message${NC}"
 }
 
 # Функция для проверки размера лог-файла

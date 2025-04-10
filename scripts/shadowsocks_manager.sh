@@ -12,6 +12,13 @@ MAX_LOG_SIZE=10485760  # 10MB в байтах
 OPKG_TIMEOUT=60  # Таймаут для opkg в секундах
 PROCESS_TIMEOUT=30  # Таймаут для процессов в секундах
 
+# Цветовые коды
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Создаем директории, если они не существуют
 mkdir -p $CONFIG_DIR
 
@@ -21,8 +28,29 @@ log() {
     shift
     local message="$*"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local color=""
+
+    # Выбираем цвет в зависимости от уровня сообщения
+    case "$level" in
+        "ERROR")
+            color=$RED
+            ;;
+        "WARNING")
+            color=$YELLOW
+            ;;
+        "INFO")
+            color=$GREEN
+            ;;
+        "DEBUG")
+            color=$BLUE
+            ;;
+    esac
+
+    # Записываем в лог-файл без цветов
     echo "$timestamp [$level] $message" >> $LOG_FILE
-    echo "$message"
+
+    # Выводим в консоль с цветом
+    echo -e "${color}$timestamp [$level] $message${NC}"
 
     # Проверяем размер лог-файла
     check_log_size
