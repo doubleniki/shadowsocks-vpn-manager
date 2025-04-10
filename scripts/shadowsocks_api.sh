@@ -568,14 +568,26 @@ start_server() {
     # Сохраняем PID текущего процесса
     echo $$ > "$PID_FILE"
 
+    # Проверяем, не блокируется ли порт файрволом
+    log "INFO" "Проверка доступности порта $port"
+    if ! nc -z localhost $port 2>/dev/null; then
+        log "INFO" "Порт $port доступен"
+    else
+        log "WARNING" "Порт $port уже используется"
+        echo "Порт $port уже используется"
+        return 1
+    fi
+
     # Запускаем HTTP-сервер на указанном порту
     while true; do
         # Проверяем версию netcat
         if nc -h 2>&1 | grep -q "listen mode"; then
             # Стандартная версия netcat (GNU)
+            log "INFO" "Используется GNU netcat"
             nc -l -p $port -e "$0" handle_request
         elif nc -h 2>&1 | grep -q "OpenBSD"; then
             # OpenBSD версия netcat
+            log "INFO" "Используется OpenBSD netcat"
             nc -l $port -e "$0" handle_request
         else
             # BusyBox версия netcat (не поддерживает -l)
@@ -583,6 +595,7 @@ start_server() {
 
             # Проверяем наличие socat
             if command -v socat >/dev/null 2>&1; then
+                log "INFO" "Запуск через socat"
                 socat TCP-LISTEN:$port,fork EXEC:"$0 handle_request"
             else
                 # Если socat не установлен, пробуем использовать встроенный HTTP-сервер
@@ -593,6 +606,7 @@ start_server() {
                 rm -f "$socket_file"
 
                 # Запускаем встроенный HTTP-сервер
+                log "INFO" "Запуск встроенного HTTP-сервера"
                 (
                     while true; do
                         # Ожидаем подключения
@@ -662,8 +676,24 @@ case "$1" in
         sleep 1
         start_server
         ;;
+    status)
+        # Проверка статуса сервера
+        if [ -f "$PID_FILE" ]; then
+            local pid=$(cat "$PID_FILE")
+            if kill -0 $pid 2>/dev/null; then
+                echo "Сервер запущен (PID: $pid)"
+                return 0
+            else
+                echo "Сервер не запущен (PID-файл существует, но процесс не найден)"
+                return 1
+            fi
+        else
+            echo "Сервер не запущен (PID-файл не найден)"
+            return 1
+        fi
+        ;;
     *)
-        echo "Использование: $0 {start|stop|restart}"
+        echo "Использование: $0 {start|stop|restart|status}"
         exit 1
         ;;
 esac
