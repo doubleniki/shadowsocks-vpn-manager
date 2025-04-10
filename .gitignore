@@ -8,3 +8,12 @@
 
 # Конфигурационные файлы с паролями
 config.json
+
+# node_modules
+node_modules
+
+# .env
+.env
+
+# .env.local
+.env.local
