@@ -101,35 +101,33 @@ else
     print_message "INFO" "netcat уже установлен."
 fi
 
-# Проверяем наличие libuci (обычно уже установлен в прошивке)
-print_message "INFO" "Проверка наличия libuci..."
+# Проверяем наличие ipset
+print_message "INFO" "Проверка наличия ipset..."
+if [ ! -f "/sbin/ipset" ]; then
+    print_message "INFO" "Установка ipset..."
+    opkg install ipset || error_exit "Не удалось установить ipset"
+else
+    print_message "INFO" "ipset уже установлен."
+fi
+
+# Проверяем наличие системных библиотек
+print_message "INFO" "Проверка системных библиотек..."
 if [ ! -f "/usr/lib/libuci.so" ]; then
-    print_message "WARNING" "libuci не найден. Это может вызвать проблемы."
-    print_message "INFO" "Попытка установки из альтернативного репозитория..."
-    opkg install --force-depends libuci || print_message "WARNING" "Не удалось установить libuci, но установка продолжится."
-else
-    print_message "INFO" "libuci уже установлен в системе."
+    print_message "ERROR" "libuci не найден. Это критическая ошибка, так как библиотека должна быть в прошивке."
+    error_exit "Отсутствует критическая системная библиотека libuci"
 fi
 
-# Проверяем наличие libuci-lua (обычно уже установлен в прошивке)
-print_message "INFO" "Проверка наличия libuci-lua..."
 if [ ! -f "/usr/lib/lua/luci/model/uci.lua" ]; then
-    print_message "WARNING" "libuci-lua не найден. Это может вызвать проблемы."
-    print_message "INFO" "Попытка установки из альтернативного репозитория..."
-    opkg install --force-depends libuci-lua || print_message "WARNING" "Не удалось установить libuci-lua, но установка продолжится."
-else
-    print_message "INFO" "libuci-lua уже установлен в системе."
+    print_message "ERROR" "libuci-lua не найден. Это критическая ошибка, так как библиотека должна быть в прошивке."
+    error_exit "Отсутствует критическая системная библиотека libuci-lua"
 fi
 
-# Проверяем наличие libustream-openssl (обычно уже установлен в прошивке)
-print_message "INFO" "Проверка наличия libustream-openssl..."
 if [ ! -f "/usr/lib/libustream-openssl.so" ]; then
-    print_message "WARNING" "libustream-openssl не найден. Это может вызвать проблемы."
-    print_message "INFO" "Попытка установки из альтернативного репозитория..."
-    opkg install --force-depends libustream-openssl || print_message "WARNING" "Не удалось установить libustream-openssl, но установка продолжится."
-else
-    print_message "INFO" "libustream-openssl уже установлен в системе."
+    print_message "ERROR" "libustream-openssl не найден. Это критическая ошибка, так как библиотека должна быть в прошивке."
+    error_exit "Отсутствует критическая системная библиотека libustream-openssl"
 fi
+
+print_message "INFO" "Все необходимые системные библиотеки найдены."
 
 # Проверяем наличие исходных файлов
 print_message "INFO" "Проверка исходных файлов..."
@@ -160,6 +158,11 @@ cp -f "$CURRENT_DIR/scripts/shadowsocks_manager.sh" "$SCRIPT_DIR/" || error_exit
 cp -f "$CURRENT_DIR/scripts/shadowsocks_api.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_api.sh"
 cp -f "$CURRENT_DIR/scripts/post_mount.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать post_mount.sh"
 cp -f "$CURRENT_DIR/scripts/shadowsocks_daemon.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать shadowsocks_daemon.sh"
+
+# Копируем скрипт удаления
+print_message "INFO" "Копирование скрипта удаления..."
+cp -f "$CURRENT_DIR/uninstall.sh" "$SCRIPT_DIR/" || error_exit "Не удалось скопировать uninstall.sh"
+chmod +x "$SCRIPT_DIR/uninstall.sh" || error_exit "Не удалось установить права на выполнение для uninstall.sh"
 
 # Копируем веб-интерфейс
 print_message "INFO" "Копирование веб-интерфейса..."
@@ -224,6 +227,9 @@ print_message "INFO" "  Проверка статуса: $SCRIPT_DIR/shadowsocks
 print_message "INFO" ""
 print_message "INFO" "Управление автозапуском и веб-интерфейсом:"
 print_message "INFO" "  $SCRIPT_DIR/shadowsocks_daemon.sh {enable-autostart|disable-autostart|enable-webui|disable-webui|start-webui|stop-webui}"
+print_message "INFO" ""
+print_message "INFO" "Для удаления Shadowsocks VPN Manager используйте:"
+print_message "INFO" "  $SCRIPT_DIR/uninstall.sh"
 print_message "INFO" ""
 print_message "INFO" "Пожалуйста, перезагрузите роутер для активации всех функций."
 

@@ -12,6 +12,15 @@ MAX_LOG_SIZE=10485760  # 10MB в байтах
 OPKG_TIMEOUT=60  # Таймаут для opkg в секундах
 PROCESS_TIMEOUT=30  # Таймаут для процессов в секундах
 
+# Проверяем наличие команды timeout
+if ! command -v timeout >/dev/null 2>&1; then
+    # Если timeout не найден, создаем функцию-заглушку
+    timeout() {
+        shift  # Удаляем первый аргумент (таймаут)
+        "$@"   # Выполняем оставшиеся аргументы как команду
+    }
+fi
+
 # Цветовые коды
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -95,7 +104,7 @@ check_dependencies() {
         # Сначала обновляем репозитории
         log "INFO" "Обновление репозиториев пакетов..."
         timeout $OPKG_TIMEOUT opkg update || {
-            log "ERROR" "Таймаут при обновлении пакетов"
+            log "ERROR" "Не удалось обновить репозитории пакетов"
             return 1
         }
 
@@ -138,13 +147,15 @@ check_dependencies() {
     # Проверяем наличие ipset
     if [ ! -f /sbin/ipset ]; then
         log "INFO" "Установка ipset..."
-        timeout $OPKG_TIMEOUT opkg install --force-depends ipset || {
-            log "ERROR" "Не удалось установить ipset"
+        # Пробуем установить ipset без таймаута, так как он может быть недоступен
+        opkg install --force-depends ipset || {
+            log "ERROR" "Не удалось установить ipset. Проверьте подключение к интернету и доступность репозиториев."
             return 1
         }
 
+        # Проверяем, что ipset действительно установился
         if [ ! -f /sbin/ipset ]; then
-            log "ERROR" "ipset не найден после установки"
+            log "ERROR" "ipset не найден после установки. Попробуйте установить его вручную: opkg install ipset"
             return 1
         fi
     fi

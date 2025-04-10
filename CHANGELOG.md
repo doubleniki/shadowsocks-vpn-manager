@@ -1,0 +1,21 @@
+## 1.0.0 (2025-04-10)
+
+* . ([5b2a997](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/5b2a997))
+* . ([52675e2](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/52675e2))
+* add color indication for service messages ([ab3019c](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/ab3019c))
+* add Entware manual isntall section to README.md ([e15a7d7](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/e15a7d7))
+* add readme & .gitignore ([790de3c](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/790de3c))
+* fix install.sh ([cd084de](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/cd084de))
+* fix install.sh ([b7d3f91](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/b7d3f91))
+* improve  shadowsocks_api.sh ([0208ae9](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/0208ae9))
+* improve all sh scripts ([d85b02f](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/d85b02f))
+* initial commit ([6cd451a](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/6cd451a))
+* make  Entware manual install section collapsable ([24744e5](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/24744e5))
+* update install.sh to handle missing deps ([6b7ec4b](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/6b7ec4b))
+* update manager script ([d75dd52](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/d75dd52))
+* update readme ([1dbf405](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/1dbf405))
+* update readme ([15d25cd](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/15d25cd))
+* update shadowsocks_api.sh to handle different netcat versions ([388b17f](https://github.com/doubleniki/shadowsocks-vpn-manager/commit/388b17f))
+
+
+
